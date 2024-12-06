@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { getFromSecureStore, removeFromSecureStore, removeKeyFromSecureStore } from '../../services/secureStore';
 
+
 const ViewCredential = ({ route, navigation }) => {
   const { id } = route.params;
   const [credential, setCredential] = useState(null);

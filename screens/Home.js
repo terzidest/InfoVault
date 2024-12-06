@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import { ScrollView, StyleSheet,Text, View } from 'react-native';
 import Card from '../components/Card';
 import { useAppContext } from '../context/AppContext';
 
@@ -12,36 +12,44 @@ const Home = ({ navigation }) => {
     }
   }, [isAuthenticated, navigation]);
 
+  const cards = [
+    { title: 'Personal Information', screen: 'PersonalInfoList',icon: 'person-outline' },
+    { title: 'Passwords', screen: 'CredentialsList',icon: 'key-outline' },
+    { title: 'Card Pins', screen: 'CredentialsList', icon: 'card-outline' },
+    { title: 'Personal Notes', screen: 'PersonalNotesList', icon: 'document-text-outline' }
+  ];
+
   return (
-    <View style={styles.container}>
+    
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.heading}>Select your category:</Text>
+    {cards.map((card, index) => (
       <Card
-        title="Credentials"
-        summary="10 saved"
-        onAddPress={() => navigation.navigate('AddCredential')}
-        onViewPress={() => navigation.navigate('CredentialsList')}
+        key={index}
+        title={card.title}
+        icon={card.icon}
+        navigateToScreen ={() => navigation.navigate(card.screen)}
       />
-      <Card
-        title="Personal Information"
-        summary="5 saved"
-        onAddPress={() => navigation.navigate('AddPersonalInfo')}
-        onViewPress={() => navigation.navigate('PersonalInfoList')}
-      />
-      <Card
-        title="Quick Notes"
-        summary="7 saved"
-        onAddPress={() => navigation.navigate('AddQuickNote')}
-        onViewPress={() => navigation.navigate('QuickNotesList')}
-      />
-    </View>
+    ))}
+  </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    paddingVertical: 20,
+    alignItems: 'center', 
+   
+  },
+  heading: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFC107',
+    marginBottom: 20,
+    textAlign: 'center',
+    textShadowColor: '#006E90',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
 });
 

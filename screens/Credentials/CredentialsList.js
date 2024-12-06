@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, FlatList, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { getFromSecureStore, removeFromSecureStore } from '../../services/secureStore';
+import { getFromSecureStore } from '../../services/secureStore';
 import { useIsFocused } from '@react-navigation/native';
+
 
 const CredentialsList = ({ navigation }) => {
   const [credentialsList, setCredentialsList] = useState([]);
@@ -52,6 +53,7 @@ const CredentialsList = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+
       <FlatList
         data={credentialsList}
         renderItem={renderItem}
@@ -64,7 +66,7 @@ const CredentialsList = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    //backgroundColor: '#006E90'
   },
   item: {
     padding: 16,

@@ -5,9 +5,11 @@ import { useAppContext } from '../context/AppContext';
 const useAuth = (navigation) => {
   const { login, logout } = useAppContext();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async () => {
     setLoading(true);
+    setError('');
     const isAuthenticated = await authenticate();
     setLoading(false);
 
@@ -15,7 +17,7 @@ const useAuth = (navigation) => {
       login();
       navigation.navigate('Home');
     } else {
-      alert('Authentication failed');
+      setError('Authentication failed. Please try again.');
     }
   };
 
@@ -28,6 +30,7 @@ const useAuth = (navigation) => {
     handleLogin,
     handleLogout,
     loading,
+    error
   };
 };
 

@@ -1,8 +1,7 @@
 export const COLORS = {
-    primary: '#1e90ff',
-    secondary: '#ff6347',
-    background: '#f5f5f5',
-    text: '#333',
+    primary: '#006E90',
+    secondary: '#FFC107',
+    textColor: '#333',
   };
   
   export const STRINGS = {

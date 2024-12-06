@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { getFromSecureStore, removeFromSecureStore } from '../../services/secureStore';
+import { View, FlatList, Alert, StyleSheet, } from 'react-native';
+import { getFromSecureStore, setToSecureStore, removeFromSecureStore } from '../../services/secureStore';
+import PersonalInfoCard from '../../components/PersonalInfoCard';
 import { useIsFocused } from '@react-navigation/native';
 
 const PersonalInfoList = ({ navigation }) => {
@@ -31,29 +32,60 @@ const PersonalInfoList = ({ navigation }) => {
     }
   }, [isFocused, fetchPersonalInfoList]);
 
-  const handleViewPersonalInfo = (id) => {
-    navigation.navigate('ViewPersonalInfo', { id });
-  };
-
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', fetchPersonalInfoList);
     return unsubscribe;
   }, [navigation, fetchPersonalInfoList]);
 
+  const handleEditPersonalInfo = async (id, newInfo) => {
+    try {
+      // Update the personal info in secure storage
+      await setToSecureStore(id, JSON.stringify(newInfo));
+      fetchPersonalInfoList(); // Reload the list after update
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save changes');
+    }
+  };
+
+  const handleDeletePersonalInfo = async (id) => {
+    try {
+      // Remove the personal info from secure storage
+      await removeFromSecureStore(id);
+      // Remove the key from personalInfoKeys as well
+      const keys = await getFromSecureStore('personalInfoKeys');
+      if (keys) {
+        const parsedKeys = JSON.parse(keys);
+        const updatedKeys = parsedKeys.filter((key) => key !== id);
+        await setToSecureStore('personalInfoKeys', JSON.stringify(updatedKeys));
+        fetchPersonalInfoList(); // Reload the list after deletion
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete personal information');
+    }
+  };
+
   const renderItem = ({ item }) => (
-    <TouchableOpacity
-      onPress={() => handleViewPersonalInfo(item.id)}
-      style={styles.item}
-    >
-      <Text>{item.name}</Text>
-      <Text>{item.idNumber}</Text>
-    </TouchableOpacity>
+    <PersonalInfoCard
+      title={item.name} // Example: ID number, Passport number, etc.
+      info={item.idNumber} // Encrypted info, will be toggled
+      onEdit={(newInfo) => handleEditPersonalInfo(item.id, newInfo)}
+      onDelete={() => handleDeletePersonalInfo(item.id)}
+    />
   );
+
+  // Dummy Data for Testing
+  const dummyData = [
+    { id: '1', name: 'ID Number', idNumber: '1234 5678 910' },
+    { id: '2', name: 'Tax ID (ΑΦΜ)', idNumber: '9876 5432 109' },
+    { id: '3', name: 'Social Security Number (ΑΜΚΑ)', idNumber: '5555 1234 567' },
+    { id: '4', name: 'Driving License', idNumber: 'ABC123456789' },
+    { id: '5', name: 'Passport Number', idNumber: 'P1234567' }
+  ];
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={personalInfoList}
+        data={dummyData} // Use dummy data for testing
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
       />
@@ -66,11 +98,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  item: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-  },
 });
 
 export default PersonalInfoList;
+
+
