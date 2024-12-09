@@ -28,14 +28,8 @@ InfoVault is a secure and user-friendly personal data manager built with **React
 6. **Expandable**:
    - Easily add new categories and features.
 
----
-
-## Installation 🚀
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/terzidest/InfoVault.git
-   cd InfoVault
+7. **Lottie Animations**:
+   - Smooth, visually appealing animations for enhanced user experience.   
 
 ---
 
@@ -49,3 +43,29 @@ Personal Information Management
 	4.	Edit or delete existing information directly from the cards.
 
 ---
+
+## Screen shots 📋
+
+### Auth Screen
+<img src="assets/screenshots/authScreen.jpg" alt="Onboarding Screen" width="200">
+
+### Home Screen
+<img src="assets/screenshots/homeScreen1.jpg" alt="Home Screen" width="200">
+<img src="assets/screenshots/homeScreen2.jpg" alt="Home Screen2" width="200">
+
+### Personal Info Screen
+<img src="assets/screenshots/perInfo1.jpg" alt="perInfo1" width="200">
+<img src="assets/screenshots/perInfo2.jpg" alt="perInfo2" width="200">
+<img src="assets/screenshots/perInfo3.jpg" alt="perInfo3" width="200">
+
+---
+
+## Technologies Used 🛠️
+
+- **React Native**: Framework for cross-platform development.
+- **Expo Secure Store**: For encrypted local storage of sensitive data.
+- **Expo Local Authentication**: For biometric and PIN authentication.
+- **Lottie**: For smooth and appealing animations.
+- **ScaledSheet**: For responsive layout design.
+
+
