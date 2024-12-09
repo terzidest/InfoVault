@@ -44,19 +44,23 @@ Personal Information Management
 
 ---
 
-## Screen shots 📋
+## Screenshots 📋
 
 ### Auth Screen
-<img src="assets/screenshots/authScreen.jpg" alt="Onboarding Screen" width="200">
+<img src="assets/screenshots/authScreen.jpg" alt="Onboarding Screen" width="200" height="400">
 
 ### Home Screen
-<img src="assets/screenshots/homeScreen1.jpg" alt="Home Screen" width="200">
-<img src="assets/screenshots/homeScreen2.jpg" alt="Home Screen2" width="200">
+<div style="display: flex; justify-content: center; gap: 10px;">
+  <img src="assets/screenshots/homeScreen1.jpg" alt="Home Screen1" width="200" height="400">
+  <img src="assets/screenshots/homeScreen2.jpg" alt="Home Screen2" width="200" height="400">
+</div>
 
 ### Personal Info Screen
-<img src="assets/screenshots/perInfo1.jpg" alt="perInfo1" width="200">
-<img src="assets/screenshots/perInfo2.jpg" alt="perInfo2" width="200">
-<img src="assets/screenshots/perInfo3.jpg" alt="perInfo3" width="200">
+<div style="display: flex; justify-content: center; gap: 10px;">
+  <img src="assets/screenshots/perInfo1.jpg" alt="Personal Info1" width="200" height="400">
+  <img src="assets/screenshots/perInfo2.jpg" alt="Personal Info2" width="200" height="400">
+  <img src="assets/screenshots/perInfo3.jpg" alt="Personal Info3" width="200" height="400">
+</div>
 
 ---
 
