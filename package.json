@@ -1,5 +1,5 @@
 {
-  "name": "infolock",
+  "name": "infovault",
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
   "scripts": {
@@ -10,25 +10,29 @@
   },
   "dependencies": {
     "@react-native-community/masked-view": "^0.1.11",
+    "@react-native-picker/picker": "2.9.0",
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/stack": "^6.4.1",
     "@types/react": "^18.2.79",
-    "expo": "^51.0.39",
-    "expo-local-authentication": "^14.0.1",
-    "expo-secure-store": "^13.0.2",
-    "expo-sqlite": "~14.0.6",
-    "expo-status-bar": "~1.12.1",
+    "expo": "^52.0.40",
+    "expo-local-authentication": "~15.0.2",
+    "expo-secure-store": "~14.0.1",
+    "expo-sqlite": "~15.1.2",
+    "expo-status-bar": "~2.0.1",
     "lottie-react-native": "^7.1.0",
-    "metro": "^0.80.8",
+    "metro": "^0.81.0",
+    "nativewind": "^4.1.23",
     "react": "^18.2.0",
-    "react-native": "^0.74.5",
+    "react-native": "0.76.7",
     "react-native-gesture-handler": "^2.16.1",
     "react-native-reanimated": "^3.10.1",
-    "react-native-safe-area-context": "^4.10.5",
-    "react-native-screens": "^3.31.1",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-screens": "~4.4.0",
     "react-native-size-matters": "^0.4.2",
-    "react-native-vector-icons": "^10.2.0"
+    "react-native-vector-icons": "^10.2.0",
+    "tailwindcss": "^3.4.17",
+    "zustand": "^4.4.1"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
@@ -36,7 +40,7 @@
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.25.9",
     "@babel/preset-typescript": "^7.26.0",
-    "babel-preset-expo": "^11.0.15",
+    "babel-preset-expo": "~12.0.0",
     "typescript": "^5.3.3"
   },
   "private": true
