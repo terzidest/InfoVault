@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, SafeAreaView, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StatusBar, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -10,15 +11,18 @@ import { Ionicons } from '@expo/vector-icons';
  * @param {boolean} showBackButton - Show back button
  * @param {function} onBackPress - Custom back button handler
  * @param {node} rightContent - Custom right content
+ * @param {boolean} showLogo - Show logo instead of title
  */
 const Header = ({ 
   title, 
-  showBackButton = true, 
+  showBackButton = false, 
   onBackPress, 
-  rightContent,
+  showSettings = false,
+  showLogo = false,
   ...props 
 }) => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   
   const handleBackPress = () => {
     if (onBackPress) {
@@ -29,37 +33,54 @@ const Header = ({
   };
   
   return (
-    <SafeAreaView className="bg-light">
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View 
-        className="h-16 flex-row items-center justify-between bg-light px-4 border-b border-gray-100 shadow-sm" 
-        {...props}
-      >
-        <View className="w-10 items-start">
+    <View className="w-full bg-primary" style={{ paddingTop: insets.top }}>
+      <StatusBar barStyle="light-content" backgroundColor="#006E90" translucent={true} />
+      <View className={`flex-row items-center justify-between px-4 py-2 ${showLogo ? 'h-20' : 'h-16'}`}>
+        <View className="w-10 items-center">
           {showBackButton && (
             <TouchableOpacity 
               onPress={handleBackPress} 
-              className="w-10 h-10 rounded-full items-center justify-center active:bg-gray-100"
+              className="w-10 h-10 rounded-full items-center justify-center"
               activeOpacity={0.7}
             >
-              <Ionicons name="chevron-back" size={24} color="#006E90" />
+              <Ionicons name="chevron-back" size={24} color="#FFC107" />
             </TouchableOpacity>
           )}
         </View>
         
-        <View className="flex-1 items-center">
-          <Text className="text-lg font-semibold text-dark" numberOfLines={1}>
-            {title || 'InfoVault'}
-          </Text>
-          <View className="h-1 w-10 bg-secondary rounded-full mt-1 opacity-80" />
+        <View className="flex-1 items-center justify-center">
+          {showLogo ? (
+            <View className="mt-0">
+              <Image
+                source={require('../../assets/images/logo.png')}
+                className="w-25 h-20"
+                resizeMode="contain"
+              />
+            </View>
+          ) : (
+            <Text className="text-2xl font-semibold text-secondary" numberOfLines={1}>
+              {title || 'InfoVault'}
+            </Text>
+          )}
         </View>
         
-        <View className="w-10 items-end">
-          {rightContent}
+        <View className="w-10 items-center">
+          {showSettings && (
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Settings')} 
+              className="w-10 h-10 rounded-full items-center justify-center bg-secondary/20"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="settings-outline" size={22} color="#FFC107" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
-    </SafeAreaView>
+      <View className="h-1 w-full bg-secondary" />
+    </View>
   );
 };
+
+
 
 export default Header;

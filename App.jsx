@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { StatusBar } from 'expo-status-bar';
+// import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import "./global.css";
 
 // Navigator
@@ -30,10 +31,9 @@ const App = () => {
   }
   
   return (
-    <>
-      <StatusBar style="dark" />
+    <SafeAreaProvider>
       <AppNavigator />
-    </>
+    </SafeAreaProvider>
   );
 };
 

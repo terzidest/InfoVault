@@ -26,29 +26,38 @@ const AppNavigator = () => {
     <NavigationContainer>
       <Stack.Navigator
         initialRouteName="Authentication"
-        screenOptions={{
-          header: ({ route, navigation, options }) => (
-            <Header
-              title={options.title || route.name}
-              showBackButton={route.name !== 'Home'}
-              onBackPress={() => navigation.goBack()}
-              rightContent={options.headerRight && options.headerRight({ tintColor: '#006E90' })}
-            />
-          ),
+        screenOptions={({ route }) => ({
+          header: ({ navigation, options }) => {
+            // Determine which type of header to show based on the route
+            const isHomeOrAuth = route.name === 'Home' || route.name === 'Authentication';
+            
+            return (
+              <Header
+                title={options.title || route.name}
+                showBackButton={!isHomeOrAuth}
+                showLogo={isHomeOrAuth}
+                showSettings={route.name === 'Home'}
+                onBackPress={() => navigation.goBack()}
+              />
+            );
+          },
           cardStyle: { backgroundColor: '#FFFFFF' },
           animationEnabled: true,
-        }}
+        })}
       >
         <Stack.Screen
           name="Authentication"
           component={Authentication}
-          options={{ headerShown: false }}
+          options={{ 
+            headerShown: true,
+            title: '',
+          }}
         />
-        <Stack.Screen 
+        <Stack.Screen
           name="Home" 
           component={Home} 
           options={{ 
-            headerShown: false,
+            headerShown: true,
             gestureEnabled: false,
           }}
         />

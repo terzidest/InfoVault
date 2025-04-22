@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,6 +14,7 @@ import Button from '../../components/ui/Button';
  */
 const Authentication = ({ navigation }) => {
   const { login, isAuthenticated } = useAuth();
+  const insets = useSafeAreaInsets();
   const { authTypes } = useAuthStore();
   const [loginAttempted, setLoginAttempted] = useState(false);
   const [error, setError] = useState(null);
@@ -81,31 +83,22 @@ const Authentication = ({ navigation }) => {
   const { text, icon } = getAuthDetails();
   
   return (
-    <View className="flex-1 bg-light justify-between p-5">
-      <View className="items-center mt-10">
-        <Image
-          source={require('../../assets/images/logo.png')}
-          className="w-20 h-20 mb-4"
-          resizeMode="contain"
-        />
-        <Text className="text-3xl font-bold text-primary mb-2">InfoVault</Text>
-        <Text className="text-sm text-gray-600 text-center max-w-[80%]">
-          Your secure personal information manager
-        </Text>
-      </View>
+    <View className="flex-1 bg-light justify-between p-5 pt-0">
+      <View className="flex-1" />
       
-      <View className="items-center mb-10">
-        <View className="h-30 w-30 mb-6 justify-center items-center">
+      <View className="items-center">
+        <Text className="text-xl font-bold text-primary mb-6">Welcome to InfoVault</Text>
+        <View style={{ height: 160, width: 160, marginBottom: 24, justifyContent: 'center', alignItems: 'center' }}>
           {!loginAttempted ? (
             <LottieView
               source={require('../../assets/animations/lock.json')}
               autoPlay
               loop
-              className="w-30 h-30"
+              style={{ width: 160, height: 160 }}
             />
           ) : (
-            <View className="w-20 h-20 rounded-full bg-gray-100 justify-center items-center border-2 border-secondary">
-              <Ionicons name={icon} size={48} color="#006E90" />
+            <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#f8f9fa', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFC107' }}>
+              <Ionicons name={icon} size={60} color="#006E90" />
             </View>
           )}
         </View>

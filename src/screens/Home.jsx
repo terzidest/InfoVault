@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -17,6 +18,7 @@ import Button from '../components/ui/Button';
  */
 const Home = ({ navigation }) => {
   const { isAuthenticated, updateLastActive } = useAuth();
+  const insets = useSafeAreaInsets();
   const { credentials, loadCredentials } = useCredentialsStore();
   const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
   const { notes, loadNotes } = useNotesStore();
@@ -71,20 +73,8 @@ const Home = ({ navigation }) => {
   
   return (
     <ScrollView className="flex-1 bg-gray-50">
-      <View className="px-4 pt-6 pb-4 bg-primary">
-        <View className="flex-row justify-between items-center mb-2">
-          <Text className="text-2xl font-bold text-white">InfoVault</Text>
-          <TouchableOpacity 
-            onPress={navigateToSettings} 
-            className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-          >
-            <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-        <Text className="text-sm text-white/80">Your secure information vault</Text>
-      </View>
-      
-      <View className="mx-4 -mt-4 mb-6 bg-white rounded-lg p-4 shadow-sm">
+      {/* Home screen content */}
+      <View className="mx-4 mt-4 mb-6 bg-white rounded-lg p-4 shadow-sm">
         <View className="flex-row">
           <View className="flex-1 items-center border-r border-gray-100">
             <Text className="text-2xl font-bold text-primary mb-1">{credentials.length}</Text>
@@ -166,5 +156,7 @@ const Home = ({ navigation }) => {
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({});
 
 export default Home;
