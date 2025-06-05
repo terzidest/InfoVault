@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
-// import { StatusBar } from 'expo-status-bar';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, StatusBar, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import "./global.css";
 
@@ -24,6 +23,11 @@ const App = () => {
   if (!isInitialized) {
     return (
       <View className="flex-1 items-center justify-center bg-light">
+        <StatusBar 
+          backgroundColor="#006E90" 
+          barStyle="light-content" 
+          translucent={true} 
+        />
         <ActivityIndicator size="large" color="#006E90" />
         <Text className="text-lg font-medium text-primary mt-4">Loading InfoVault...</Text>
       </View>
@@ -32,6 +36,11 @@ const App = () => {
   
   return (
     <SafeAreaProvider>
+      <StatusBar 
+        backgroundColor="#006E90" 
+        barStyle="light-content" 
+        translucent={true} 
+      />
       <AppNavigator />
     </SafeAreaProvider>
   );

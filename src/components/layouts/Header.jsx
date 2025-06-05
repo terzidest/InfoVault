@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StatusBar, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Image} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
  * @param {string} title - Screen title
  * @param {boolean} showBackButton - Show back button
  * @param {function} onBackPress - Custom back button handler
- * @param {node} rightContent - Custom right content
+ * @param {boolean} showSettings - Show settings button
  * @param {boolean} showLogo - Show logo instead of title
  */
 const Header = ({ 
@@ -34,8 +34,7 @@ const Header = ({
   
   return (
     <View className="w-full bg-primary" style={{ paddingTop: insets.top }}>
-      <StatusBar barStyle="light-content" backgroundColor="#006E90" translucent={true} />
-      <View className={`flex-row items-center justify-between px-4 py-2 ${showLogo ? 'h-20' : 'h-16'}`}>
+      <View className="flex-row items-center justify-between px-4 py-2 h-20">
         <View className="w-10 items-center">
           {showBackButton && (
             <TouchableOpacity 
@@ -68,7 +67,7 @@ const Header = ({
           {showSettings && (
             <TouchableOpacity 
               onPress={() => navigation.navigate('Settings')} 
-              className="w-10 h-10 rounded-full items-center justify-center bg-secondary/20"
+              className="w-10 h-10 rounded-full items-center justify-center"
               activeOpacity={0.7}
             >
               <Ionicons name="settings-outline" size={22} color="#FFC107" />
@@ -80,7 +79,5 @@ const Header = ({
     </View>
   );
 };
-
-
 
 export default Header;
