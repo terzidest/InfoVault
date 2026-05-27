@@ -1,129 +1,126 @@
 import { create } from 'zustand';
-import { 
-  saveToSecureStore, 
-  getFromSecureStore, 
-  deleteFromSecureStore, 
-  getAllItemsByType 
+import {
+  saveToSecureStore,
+  getFromSecureStore,
+  deleteFromSecureStore,
+  getAllItemsByType,
 } from '../services/secureStorage';
 import { generateSecureId } from '../utils/encryption';
+import type { Credential, CredentialInput } from '../types/models';
 
-/**
- * Credentials state management using Zustand
- */
-const useCredentialsStore = create((set, get) => ({
-  // State
+interface CredentialsState {
+  credentials: Credential[];
+  isLoading: boolean;
+  error: string | null;
+  loadCredentials: () => Promise<Credential[]>;
+  addCredential: (credential: CredentialInput) => Promise<Credential>;
+  updateCredential: (id: string, updatedData: Partial<Credential>) => Promise<Credential>;
+  deleteCredential: (id: string) => Promise<boolean>;
+  getCredentialById: (id: string) => Credential | undefined;
+  clearCredentials: () => void;
+}
+
+const useCredentialsStore = create<CredentialsState>((set, get) => ({
   credentials: [],
   isLoading: false,
   error: null,
-  
-  // Load all credentials
+
   loadCredentials: async () => {
     set({ isLoading: true, error: null });
     try {
-      const credentials = await getAllItemsByType('credential');
+      // Note: getAllItemsByType returns { key, data, lastModified, type } wrappers,
+      // but the rest of the app consumes flat Credential objects. Preserving the
+      // existing runtime behavior here; the shape is treated as Credential[] downstream.
+      const credentials = (await getAllItemsByType<Credential>('credential')) as unknown as Credential[];
       set({ credentials, isLoading: false });
       return credentials;
     } catch (error) {
       console.error('Error loading credentials:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       return [];
     }
   },
-  
-  // Add new credential
+
   addCredential: async (credential) => {
     set({ isLoading: true, error: null });
     try {
-      // Generate unique ID
       const id = generateSecureId();
-      
-      // Prepare the credential with metadata
-      const newCredential = {
+      const now = new Date().toISOString();
+
+      const newCredential: Credential = {
         id,
         ...credential,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: now,
+        updatedAt: now,
       };
-      
-      // Save to secure storage
+
       await saveToSecureStore(id, newCredential, 'credential');
-      
-      // Update state
+
       const credentials = [...get().credentials, newCredential];
       set({ credentials, isLoading: false });
-      
+
       return newCredential;
     } catch (error) {
       console.error('Error adding credential:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       throw error;
     }
   },
-  
-  // Update existing credential
+
   updateCredential: async (id, updatedData) => {
     set({ isLoading: true, error: null });
     try {
-      // Get the existing credential
-      const existingCredential = await getFromSecureStore(id);
-      
+      const existingCredential = await getFromSecureStore<Credential>(id);
+
       if (!existingCredential) {
         throw new Error('Credential not found');
       }
-      
-      // Merge data and update metadata
-      const updatedCredential = {
+
+      const updatedCredential: Credential = {
         ...existingCredential,
         ...updatedData,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      
-      // Save to secure storage
+
       await saveToSecureStore(id, updatedCredential, 'credential');
-      
-      // Update state
-      const credentials = get().credentials.map(cred => 
+
+      const credentials = get().credentials.map((cred) =>
         cred.id === id ? { ...cred, ...updatedCredential } : cred
       );
-      
+
       set({ credentials, isLoading: false });
-      
+
       return updatedCredential;
     } catch (error) {
       console.error('Error updating credential:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       throw error;
     }
   },
-  
-  // Delete credential
+
   deleteCredential: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      // Delete from secure storage
       await deleteFromSecureStore(id, 'credential');
-      
-      // Update state
-      const credentials = get().credentials.filter(cred => cred.id !== id);
+
+      const credentials = get().credentials.filter((cred) => cred.id !== id);
       set({ credentials, isLoading: false });
-      
+
       return true;
     } catch (error) {
       console.error('Error deleting credential:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       throw error;
     }
   },
-  
-  // Get credential by ID
+
   getCredentialById: (id) => {
-    return get().credentials.find(cred => cred.id === id);
+    return get().credentials.find((cred) => cred.id === id);
   },
-  
-  // Clear credentials state (e.g., on logout)
+
   clearCredentials: () => {
     set({ credentials: [], error: null });
-  }
+  },
 }));
 
 export default useCredentialsStore;

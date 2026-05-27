@@ -1,58 +1,65 @@
 import { create } from 'zustand';
 import { authenticate, checkAuthenticationTypes } from '../services/authentication';
 import * as SecureStore from 'expo-secure-store';
+import type { AuthTypes } from '../types/models';
 
-/**
- * Authentication state management using Zustand
- */
-const useAuthStore = create((set, get) => ({
-  // State
+interface AuthState {
+  isAuthenticated: boolean;
+  isInitialized: boolean;
+  isLoading: boolean;
+  authError: string | null;
+  lastActive: Date;
+  authTypes: AuthTypes | null;
+  init: () => Promise<boolean>;
+  completeSetup: () => Promise<boolean>;
+  login: () => Promise<boolean>;
+  logout: () => void;
+  updateLastActive: () => void;
+  checkTimeout: (timeoutDuration?: number) => boolean | undefined;
+}
+
+const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isInitialized: false,
   isLoading: false,
   authError: null,
   lastActive: new Date(),
   authTypes: null,
-  
-  // Initialize authentication state
+
   init: async () => {
     set({ isLoading: true });
     try {
-      // Check if app has been set up
       const setupComplete = await SecureStore.getItemAsync('setupComplete');
-      
-      // If setup is not complete, we don't need to authenticate yet
+
       if (setupComplete !== 'true') {
-        set({ 
-          isAuthenticated: false, 
+        set({
+          isAuthenticated: false,
           isInitialized: true,
-          isLoading: false
+          isLoading: false,
         });
         return false;
       }
-      
-      // Check available authentication types
+
       const authTypes = await checkAuthenticationTypes();
-      
-      set({ 
+
+      set({
         isInitialized: true,
         isLoading: false,
-        authTypes
+        authTypes,
       });
-      
+
       return true;
     } catch (error) {
       console.error('Error initializing auth store:', error);
-      set({ 
+      set({
         isInitialized: true,
         isLoading: false,
-        authError: error.message
+        authError: error instanceof Error ? error.message : String(error),
       });
       return false;
     }
   },
-  
-  // Complete setup
+
   completeSetup: async () => {
     try {
       await SecureStore.setItemAsync('setupComplete', 'true');
@@ -62,53 +69,49 @@ const useAuthStore = create((set, get) => ({
       return false;
     }
   },
-  
-  // Login with biometrics/PIN
+
   login: async () => {
     set({ isLoading: true, authError: null });
     try {
       const success = await authenticate();
-      set({ 
-        isAuthenticated: success, 
+      set({
+        isAuthenticated: success,
         isLoading: false,
-        lastActive: new Date()
+        lastActive: new Date(),
       });
       return success;
     } catch (error) {
-      set({ 
-        authError: error.message, 
-        isLoading: false 
+      set({
+        authError: error instanceof Error ? error.message : String(error),
+        isLoading: false,
       });
       return false;
     }
   },
-  
-  // Logout
+
   logout: () => {
     set({ isAuthenticated: false });
   },
-  
-  // Update last active timestamp
+
   updateLastActive: () => {
     set({ lastActive: new Date() });
   },
-  
-  // Check for timeout
-  checkTimeout: (timeoutDuration = 300000) => { // 5 minutes by default
+
+  checkTimeout: (timeoutDuration = 300000) => {
     const { lastActive, isAuthenticated, logout } = get();
-    
+
     if (!isAuthenticated) return;
-    
+
     const now = new Date();
-    const timeDiff = now - lastActive;
-    
+    const timeDiff = now.getTime() - lastActive.getTime();
+
     if (timeDiff > timeoutDuration) {
       logout();
       return true;
     }
-    
+
     return false;
-  }
+  },
 }));
 
 export default useAuthStore;

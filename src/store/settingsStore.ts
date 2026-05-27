@@ -1,104 +1,97 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { checkPremiumStatus } from '../services/premium';
+import type { Settings } from '../types/models';
 
-/**
- * Settings state management using Zustand
- */
-const useSettingsStore = create((set, get) => ({
-  // State
-  settings: {
-    theme: 'light',
-    autoLockTimeout: 300000, // 5 minutes in milliseconds
-    showBiometricPrompt: true,
-    maskSensitiveData: true,
-  },
+const DEFAULT_SETTINGS: Settings = {
+  theme: 'light',
+  autoLockTimeout: 300000,
+  showBiometricPrompt: true,
+  maskSensitiveData: true,
+};
+
+interface SettingsState {
+  settings: Settings;
+  isPremium: boolean;
+  isLoading: boolean;
+  error: string | null;
+  initSettings: () => Promise<Settings>;
+  updateSettings: (newSettings: Partial<Settings>) => Promise<Settings>;
+  resetSettings: () => Promise<Settings>;
+  updatePremiumStatus: () => Promise<boolean>;
+}
+
+const useSettingsStore = create<SettingsState>((set, get) => ({
+  settings: { ...DEFAULT_SETTINGS },
   isPremium: false,
   isLoading: false,
   error: null,
-  
-  // Initialize settings
+
   initSettings: async () => {
     set({ isLoading: true, error: null });
     try {
-      // Load settings from secure storage
       const storedSettings = await SecureStore.getItemAsync('appSettings');
-      
-      // Check premium status
       const isPremium = await checkPremiumStatus();
-      
+
       if (storedSettings) {
-        set({ 
-          settings: JSON.parse(storedSettings),
+        set({
+          settings: JSON.parse(storedSettings) as Settings,
           isPremium,
-          isLoading: false 
+          isLoading: false,
         });
       } else {
-        // Save default settings if none exist
         await SecureStore.setItemAsync('appSettings', JSON.stringify(get().settings));
-        set({ 
+        set({
           isPremium,
-          isLoading: false 
+          isLoading: false,
         });
       }
-      
+
       return get().settings;
     } catch (error) {
       console.error('Error initializing settings:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       return get().settings;
     }
   },
-  
-  // Update settings
+
   updateSettings: async (newSettings) => {
     set({ isLoading: true, error: null });
     try {
-      const updatedSettings = {
+      const updatedSettings: Settings = {
         ...get().settings,
-        ...newSettings
+        ...newSettings,
       };
-      
-      // Save to secure storage
+
       await SecureStore.setItemAsync('appSettings', JSON.stringify(updatedSettings));
-      
-      // Update state
+
       set({ settings: updatedSettings, isLoading: false });
-      
+
       return updatedSettings;
     } catch (error) {
       console.error('Error updating settings:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       throw error;
     }
   },
-  
-  // Reset settings to defaults
+
   resetSettings: async () => {
     set({ isLoading: true, error: null });
     try {
-      const defaultSettings = {
-        theme: 'light',
-        autoLockTimeout: 300000,
-        showBiometricPrompt: true,
-        maskSensitiveData: true,
-      };
-      
-      // Save to secure storage
+      const defaultSettings: Settings = { ...DEFAULT_SETTINGS };
+
       await SecureStore.setItemAsync('appSettings', JSON.stringify(defaultSettings));
-      
-      // Update state
+
       set({ settings: defaultSettings, isLoading: false });
-      
+
       return defaultSettings;
     } catch (error) {
       console.error('Error resetting settings:', error);
-      set({ error: error.message, isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
       throw error;
     }
   },
-  
-  // Update premium status
+
   updatePremiumStatus: async () => {
     try {
       const isPremium = await checkPremiumStatus();
@@ -108,7 +101,7 @@ const useSettingsStore = create((set, get) => ({
       console.error('Error checking premium status:', error);
       return get().isPremium;
     }
-  }
+  },
 }));
 
 export default useSettingsStore;
