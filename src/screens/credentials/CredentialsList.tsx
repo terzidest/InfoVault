@@ -7,23 +7,20 @@ import { useFocusEffect } from '@react-navigation/native';
 import useCredentialsStore from '../../store/credentialsStore';
 import useAuth from '../../hooks/useAuth';
 import CredentialListItem from '../../components/features/credentials/CredentialListItem';
+import type { ScreenProps } from '../../types/navigation';
+import type { Credential } from '../../types/models';
 
-/**
- * Credentials list screen
- */
-const CredentialsList = ({ navigation }) => {
-  const { credentials, loadCredentials, isLoading } = useCredentialsStore();
+const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation }) => {
+  const { credentials, loadCredentials } = useCredentialsStore();
   const { isAuthenticated, updateLastActive } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // Handle authentication check
+  const [searchQuery] = useState('');
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace('Authentication');
     }
   }, [isAuthenticated, navigation]);
-  
-  // Load credentials when screen comes into focus
+
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
@@ -32,27 +29,25 @@ const CredentialsList = ({ navigation }) => {
       }
     }, [isAuthenticated])
   );
-  
-  // Navigate to add credential screen
+
   const handleAddCredential = () => {
     navigation.navigate('AddCredential');
   };
-  
-  // Navigate to credential details screen
-  const handleViewCredential = (credential) => {
+
+  const handleViewCredential = (credential: Credential) => {
     navigation.navigate('ViewCredential', { id: credential.id });
   };
-  
-  // Filter credentials based on search query
-  const filteredCredentials = searchQuery.length > 0
-    ? credentials.filter(cred => 
-        cred.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cred.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cred.website?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : credentials;
-  
-  // Render empty state
+
+  const filteredCredentials =
+    searchQuery.length > 0
+      ? credentials.filter(
+          (cred) =>
+            cred.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            cred.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            cred.website?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : credentials;
+
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="key-outline" size={scale(60)} color="#CCCCCC" />
@@ -62,20 +57,9 @@ const CredentialsList = ({ navigation }) => {
       </Text>
     </View>
   );
-  
+
   return (
     <View style={styles.container}>
-      {/* Search bar (disabled for MVP) */}
-      {/* <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={scale(20)} color="#999999" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search credentials..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View> */}
-      
       <FlatList
         data={filteredCredentials}
         keyExtractor={(item) => item.id}
@@ -88,7 +72,7 @@ const CredentialsList = ({ navigation }) => {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
       />
-      
+
       <TouchableOpacity style={styles.addButton} onPress={handleAddCredential}>
         <Ionicons name="add" size={scale(24)} color="#FFFFFF" />
       </TouchableOpacity>
@@ -100,22 +84,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: scale(8),
-    marginHorizontal: scale(16),
-    marginVertical: scale(12),
-    paddingHorizontal: scale(12),
-    paddingVertical: scale(8),
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: scale(14),
-    marginLeft: scale(8),
-    color: '#333333',
   },
   listContent: {
     padding: scale(16),

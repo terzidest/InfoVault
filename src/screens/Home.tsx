@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,26 +11,30 @@ import useSettingsStore from '../store/settingsStore';
 
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import type { ScreenProps } from '../types/navigation';
 
-/**
- * Home screen with category overview
- */
-const Home = ({ navigation }) => {
+interface CategoryCardProps {
+  title: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  count: number;
+  onPress: () => void;
+  color: string;
+  description?: string;
+}
+
+const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const { isAuthenticated, updateLastActive } = useAuth();
-  const insets = useSafeAreaInsets();
   const { credentials, loadCredentials } = useCredentialsStore();
   const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
   const { notes, loadNotes } = useNotesStore();
   const { initSettings } = useSettingsStore();
-  
-  // Check authentication before loading data
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace('Authentication');
     }
   }, [isAuthenticated, navigation]);
-  
-  // Load data when screen comes into focus
+
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
@@ -43,22 +46,23 @@ const Home = ({ navigation }) => {
       }
     }, [isAuthenticated])
   );
-  
-  // Navigate to category screens
+
   const navigateToCredentials = () => navigation.navigate('CredentialsList');
   const navigateToPersonalInfo = () => navigation.navigate('PersonalInfoList');
   const navigateToNotes = () => navigation.navigate('NotesList');
   const navigateToSettings = () => navigation.navigate('Settings');
-  
-  // Card for each category
-  const CategoryCard = ({ title, icon, count, onPress, color, description }) => (
-    <TouchableOpacity 
-      className="bg-white rounded-lg p-4 mb-3 shadow-sm border-l-4" 
+
+  const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, count, onPress, color, description }) => (
+    <TouchableOpacity
+      className="bg-white rounded-lg p-4 mb-3 shadow-sm border-l-4"
       style={{ borderLeftColor: color }}
       onPress={onPress}
     >
       <View className="flex-row items-center">
-        <View className="w-12 h-12 rounded-full justify-center items-center mr-4" style={{ backgroundColor: color + '20' }}>
+        <View
+          className="w-12 h-12 rounded-full justify-center items-center mr-4"
+          style={{ backgroundColor: color + '20' }}
+        >
           <Ionicons name={icon} size={24} color={color} />
         </View>
         <View className="flex-1">
@@ -70,10 +74,9 @@ const Home = ({ navigation }) => {
       </View>
     </TouchableOpacity>
   );
-  
+
   return (
     <ScrollView className="flex-1 bg-gray-50">
-      {/* Home screen content */}
       <View className="mx-4 mt-4 mb-6 bg-white rounded-lg p-4 shadow-sm">
         <View className="flex-row">
           <View className="flex-1 items-center border-r border-gray-100">
@@ -90,12 +93,12 @@ const Home = ({ navigation }) => {
           </View>
         </View>
       </View>
-      
+
       <View className="mx-4 mb-3 flex-row items-center">
         <View className="w-1 h-5 bg-secondary rounded-full mr-2" />
         <Text className="text-lg font-semibold text-dark">Categories</Text>
       </View>
-      
+
       <View className="mx-4">
         <CategoryCard
           title="Credentials"
@@ -105,7 +108,7 @@ const Home = ({ navigation }) => {
           onPress={navigateToCredentials}
           color="#006E90"
         />
-        
+
         <CategoryCard
           title="Personal Information"
           description="Keep IDs, passports and documents"
@@ -114,7 +117,7 @@ const Home = ({ navigation }) => {
           onPress={navigateToPersonalInfo}
           color="#FFC107"
         />
-        
+
         <CategoryCard
           title="Notes"
           description="Secure private notes and ideas"
@@ -124,7 +127,7 @@ const Home = ({ navigation }) => {
           color="#4CAF50"
         />
       </View>
-      
+
       <Card
         className="mx-4 mt-4 mb-6"
         variant="accent"
@@ -135,18 +138,18 @@ const Home = ({ navigation }) => {
           Use strong, unique passwords for each of your accounts to enhance security.
         </Text>
       </Card>
-      
+
       <View className="mx-4 mb-8 flex-row">
-        <Button 
-          variant="outlineSecondary" 
+        <Button
+          variant="outlineSecondary"
           className="flex-1 mr-2"
           icon="add-outline"
           onPress={() => navigation.navigate('AddCredential')}
         >
           Add New
         </Button>
-        <Button 
-          variant="secondary" 
+        <Button
+          variant="secondary"
           className="flex-1 ml-2"
           onPress={navigateToSettings}
         >
@@ -156,7 +159,5 @@ const Home = ({ navigation }) => {
     </ScrollView>
   );
 };
-
-const styles = StyleSheet.create({});
 
 export default Home;

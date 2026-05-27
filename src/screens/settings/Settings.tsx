@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch, Alert, TouchableOpacity } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,15 +8,18 @@ import { Picker } from '@react-native-picker/picker';
 import useSettingsStore from '../../store/settingsStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
+import type { ScreenProps } from '../../types/navigation';
+import type { Settings as SettingsType } from '../../types/models';
 
-/**
- * Settings screen
- */
-const Settings = ({ navigation }) => {
-  const { settings, isPremium, initSettings, updateSettings, resetSettings, updatePremiumStatus } = useSettingsStore();
+type ToggleableSettingKey = {
+  [K in keyof SettingsType]: SettingsType[K] extends boolean ? K : never;
+}[keyof SettingsType];
+
+const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
+  const { settings, isPremium, initSettings, updateSettings, resetSettings, updatePremiumStatus } =
+    useSettingsStore();
   const { isAuthenticated, updateLastActive, logout } = useAuth();
-  
-  // Timeout options (in milliseconds)
+
   const timeoutOptions = [
     { label: '1 minute', value: 60000 },
     { label: '5 minutes', value: 300000 },
@@ -24,19 +27,17 @@ const Settings = ({ navigation }) => {
     { label: '30 minutes', value: 1800000 },
     { label: '1 hour', value: 3600000 },
   ];
-  
-  // Check authentication and load settings
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace('Authentication');
       return;
     }
-    
+
     initSettings();
     updatePremiumStatus();
   }, [isAuthenticated, navigation]);
-  
-  // Update last active timestamp when screen is focused
+
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
@@ -44,80 +45,74 @@ const Settings = ({ navigation }) => {
       }
     }, [isAuthenticated])
   );
-  
-  // Handle setting changes
-  const handleToggleSetting = (key) => {
+
+  const handleToggleSetting = (key: ToggleableSettingKey) => {
     updateLastActive();
     updateSettings({ [key]: !settings[key] });
   };
-  
-  // Handle timeout change
-  const handleTimeoutChange = (value) => {
+
+  const handleTimeoutChange = (value: number) => {
     updateLastActive();
     updateSettings({ autoLockTimeout: value });
   };
-  
-  // Handle reset settings
+
   const handleResetSettings = () => {
     Alert.alert(
       'Reset Settings',
       'Are you sure you want to reset all settings to their default values?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Reset', 
+        {
+          text: 'Reset',
           style: 'destructive',
           onPress: async () => {
             await resetSettings();
             Alert.alert('Settings Reset', 'All settings have been reset to their default values.');
-          }
-        }
+          },
+        },
       ]
     );
   };
-  
-  // Handle logout
+
   const handleLogout = () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout? You will need to authenticate again to access your data.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
+        {
+          text: 'Logout',
           style: 'destructive',
           onPress: () => {
             logout();
             navigation.replace('Authentication');
-          }
-        }
+          },
+        },
       ]
     );
   };
-  
-  // Handle premium information
+
   const handlePremiumInfo = () => {
     Alert.alert(
       'Premium Features',
       'Upgrade to InfoVault Premium to access cloud backup, multi-device sync, custom categories, and more!',
       [
         { text: 'Maybe Later', style: 'cancel' },
-        { 
+        {
           text: 'Learn More',
           onPress: () => {
-            // This would typically open a premium screen or website
             Alert.alert('Coming Soon', 'Premium features will be available in a future update.');
-          }
-        }
+          },
+        },
       ]
     );
   };
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Security</Text>
-        
+
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingTitle}>Mask Sensitive Data</Text>
@@ -132,7 +127,7 @@ const Settings = ({ navigation }) => {
             thumbColor="#FFFFFF"
           />
         </View>
-        
+
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingTitle}>Show Biometric Prompt</Text>
@@ -147,7 +142,7 @@ const Settings = ({ navigation }) => {
             thumbColor="#FFFFFF"
           />
         </View>
-        
+
         <View style={styles.pickerSettingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingTitle}>Auto-Lock Timeout</Text>
@@ -169,10 +164,10 @@ const Settings = ({ navigation }) => {
           </View>
         </View>
       </View>
-      
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Appearance</Text>
-        
+
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingTitle}>Dark Theme</Text>
@@ -191,57 +186,49 @@ const Settings = ({ navigation }) => {
           />
         </View>
       </View>
-      
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Premium</Text>
-        
+
         <TouchableOpacity style={styles.premiumBanner} onPress={handlePremiumInfo}>
           <View style={styles.premiumInfo}>
             <Text style={styles.premiumTitle}>
               {isPremium ? 'InfoVault Premium' : 'Upgrade to Premium'}
             </Text>
             <Text style={styles.premiumDescription}>
-              {isPremium 
+              {isPremium
                 ? 'You have access to all premium features'
                 : 'Get cloud backup, sync, and more premium features'}
             </Text>
           </View>
-          <Ionicons 
-            name={isPremium ? 'checkmark-circle' : 'arrow-forward-circle'} 
-            size={scale(24)} 
-            color={isPremium ? '#4CAF50' : '#006E90'} 
+          <Ionicons
+            name={isPremium ? 'checkmark-circle' : 'arrow-forward-circle'}
+            size={scale(24)}
+            color={isPremium ? '#4CAF50' : '#006E90'}
           />
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
-        
+
         <View style={styles.aboutItem}>
           <Text style={styles.aboutLabel}>Version</Text>
           <Text style={styles.aboutValue}>1.0.0 (MVP)</Text>
         </View>
-        
+
         <View style={styles.aboutItem}>
           <Text style={styles.aboutLabel}>Developer</Text>
           <Text style={styles.aboutValue}>InfoVault Team</Text>
         </View>
       </View>
-      
+
       <View style={styles.actionButtonsContainer}>
-        <Button
-          variant="outline"
-          style={styles.actionButton}
-          onPress={handleResetSettings}
-        >
+        <Button variant="outline" style={styles.actionButton} onPress={handleResetSettings}>
           Reset Settings
         </Button>
-        
-        <Button
-          variant="danger"
-          style={styles.actionButton}
-          onPress={handleLogout}
-        >
+
+        <Button variant="danger" style={styles.actionButton} onPress={handleLogout}>
           Logout
         </Button>
       </View>

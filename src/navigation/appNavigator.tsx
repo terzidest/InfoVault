@@ -2,7 +2,6 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
-// Screens
 import Home from '../screens/Home';
 import Authentication from '../screens/auth/Authentication';
 import CredentialsList from '../screens/credentials/CredentialsList';
@@ -16,21 +15,20 @@ import AddNote from '../screens/notes/AddNote';
 import ViewNote from '../screens/notes/ViewNote';
 import Settings from '../screens/settings/Settings';
 
-// Components
 import Header from '../components/layouts/Header';
+import type { RootStackParamList } from '../types/navigation';
 
-const Stack = createStackNavigator();
+const Stack = createStackNavigator<RootStackParamList>();
 
-const AppNavigator = () => {
+const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
         initialRouteName="Authentication"
         screenOptions={({ route }) => ({
           header: ({ navigation, options }) => {
-            // Determine which type of header to show based on the route
             const isHomeOrAuth = route.name === 'Home' || route.name === 'Authentication';
-            
+
             return (
               <Header
                 title={options.title || route.name}
@@ -48,15 +46,15 @@ const AppNavigator = () => {
         <Stack.Screen
           name="Authentication"
           component={Authentication}
-          options={{ 
+          options={{
             headerShown: true,
             title: '',
           }}
         />
         <Stack.Screen
-          name="Home" 
-          component={Home} 
-          options={{ 
+          name="Home"
+          component={Home}
+          options={{
             headerShown: true,
             gestureEnabled: false,
           }}

@@ -1,35 +1,43 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
-import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 
 import usePersonalInfoStore from '../../store/personalInfoStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import { validateFields } from '../../utils/validation';
+import { validateFields, ValidationRules } from '../../utils/validation';
+import type { ScreenProps } from '../../types/navigation';
 
-/**
- * Add personal information screen
- */
-const AddPersonalInfo = ({ navigation }) => {
+interface FormData {
+  title: string;
+  type: string;
+  identifier: string;
+  issueDate: string;
+  expiryDate: string;
+  issuingAuthority: string;
+  notes: string;
+}
+
+type FormErrors = Partial<Record<keyof FormData, string>>;
+
+const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation }) => {
   const { addPersonalInfo, isLoading } = usePersonalInfoStore();
   const { updateLastActive } = useAuth();
-  
-  // Personal info types
+
   const infoTypes = [
     { label: 'Select Type...', value: '' },
     { label: 'Passport', value: 'Passport' },
-    { label: 'Driver\'s License', value: 'Driver\'s License' },
+    { label: "Driver's License", value: "Driver's License" },
     { label: 'ID Card', value: 'ID Card' },
     { label: 'Social Security', value: 'Social Security' },
     { label: 'Tax Number', value: 'Tax Number' },
     { label: 'Health Insurance', value: 'Health Insurance' },
-    { label: 'Other', value: 'Other' }
+    { label: 'Other', value: 'Other' },
   ];
-  
-  const [formData, setFormData] = useState({
+
+  const [formData, setFormData] = useState<FormData>({
     title: '',
     type: '',
     identifier: '',
@@ -38,69 +46,65 @@ const AddPersonalInfo = ({ navigation }) => {
     issuingAuthority: '',
     notes: '',
   });
-  
-  const [formErrors, setFormErrors] = useState({});
-  
-  // Update form data
-  const handleChange = (field, value) => {
+
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const handleChange = (field: keyof FormData, value: string) => {
     updateLastActive();
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
-    
-    // Clear error for the field when user edits it
+
     if (formErrors[field]) {
-      setFormErrors(prev => ({
+      setFormErrors((prev) => ({
         ...prev,
-        [field]: ''
+        [field]: '',
       }));
     }
   };
-  
-  // Save personal info
+
   const handleSave = async () => {
     updateLastActive();
-    
-    // Validate form
-    const validationRules = {
+
+    const validationRules: ValidationRules<FormData> = {
       title: { required: true, maxLength: 100 },
       type: { required: true },
       identifier: { required: true, maxLength: 100 },
-      issueDate: { 
+      issueDate: {
         date: true,
         validate: (value) => {
-          if (value && !value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          if (value && typeof value === 'string' && !value.match(/^\d{4}-\d{2}-\d{2}$/)) {
             return 'Use format YYYY-MM-DD';
           }
           return '';
-        }
+        },
       },
-      expiryDate: { 
+      expiryDate: {
         date: true,
         validate: (value) => {
-          if (value && !value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          if (value && typeof value === 'string' && !value.match(/^\d{4}-\d{2}-\d{2}$/)) {
             return 'Use format YYYY-MM-DD';
           }
           return '';
-        }
+        },
       },
       issuingAuthority: { maxLength: 100 },
       notes: { maxLength: 500 },
     };
-    
+
     const { isValid, errors } = validateFields(formData, validationRules);
-    
+
     if (!isValid) {
       setFormErrors(errors);
       return;
     }
-    
+
     try {
       await addPersonalInfo(formData);
       navigation.goBack();
-    } catch (error) {
+    } catch {
       Alert.alert(
         'Error Saving Information',
         'An error occurred while saving your personal information. Please try again.',
@@ -108,11 +112,10 @@ const AddPersonalInfo = ({ navigation }) => {
       );
     }
   };
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.formContainer}>
-        {/* Title */}
         <Input
           label="Title"
           value={formData.title}
@@ -121,8 +124,7 @@ const AddPersonalInfo = ({ navigation }) => {
           error={!!formErrors.title}
           helperText={formErrors.title}
         />
-        
-        {/* Type */}
+
         <View style={styles.pickerContainer}>
           <Text style={styles.label}>Type</Text>
           <View style={[styles.pickerWrapper, !!formErrors.type && styles.pickerError]}>
@@ -141,8 +143,7 @@ const AddPersonalInfo = ({ navigation }) => {
             <Text style={styles.errorText}>{formErrors.type}</Text>
           )}
         </View>
-        
-        {/* Identifier */}
+
         <Input
           label="Identifier Number"
           value={formData.identifier}
@@ -152,8 +153,7 @@ const AddPersonalInfo = ({ navigation }) => {
           error={!!formErrors.identifier}
           helperText={formErrors.identifier}
         />
-        
-        {/* Issue Date */}
+
         <Input
           label="Issue Date (optional)"
           value={formData.issueDate}
@@ -162,8 +162,7 @@ const AddPersonalInfo = ({ navigation }) => {
           error={!!formErrors.issueDate}
           helperText={formErrors.issueDate || 'Format: YYYY-MM-DD'}
         />
-        
-        {/* Expiry Date */}
+
         <Input
           label="Expiry Date (optional)"
           value={formData.expiryDate}
@@ -172,8 +171,7 @@ const AddPersonalInfo = ({ navigation }) => {
           error={!!formErrors.expiryDate}
           helperText={formErrors.expiryDate || 'Format: YYYY-MM-DD'}
         />
-        
-        {/* Issuing Authority */}
+
         <Input
           label="Issuing Authority (optional)"
           value={formData.issuingAuthority}
@@ -182,8 +180,7 @@ const AddPersonalInfo = ({ navigation }) => {
           error={!!formErrors.issuingAuthority}
           helperText={formErrors.issuingAuthority}
         />
-        
-        {/* Notes */}
+
         <Input
           label="Notes (optional)"
           value={formData.notes}
@@ -193,8 +190,7 @@ const AddPersonalInfo = ({ navigation }) => {
           error={!!formErrors.notes}
           helperText={formErrors.notes}
         />
-        
-        {/* Buttons */}
+
         <View style={styles.buttonsContainer}>
           <Button
             variant="outline"
@@ -203,7 +199,7 @@ const AddPersonalInfo = ({ navigation }) => {
           >
             Cancel
           </Button>
-          
+
           <Button
             style={styles.button}
             onPress={handleSave}

@@ -4,71 +4,65 @@ import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import useNotesStore from '../../store/notesStore';
+import usePersonalInfoStore from '../../store/personalInfoStore';
 import useAuth from '../../hooks/useAuth';
-import NoteListItem from '../../components/features/notes/NoteListItem';
+import PersonalInfoListItem from '../../components/features/personalInfo/PersonalInfoListItem';
+import type { ScreenProps } from '../../types/navigation';
+import type { PersonalInfo } from '../../types/models';
 
-/**
- * Notes list screen
- */
-const NotesList = ({ navigation }) => {
-  const { notes, loadNotes, isLoading } = useNotesStore();
+const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigation }) => {
+  const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
   const { isAuthenticated, updateLastActive } = useAuth();
-  
-  // Handle authentication check
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace('Authentication');
     }
   }, [isAuthenticated, navigation]);
-  
-  // Load notes when screen comes into focus
+
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
-        loadNotes();
+        loadPersonalInfo();
       }
     }, [isAuthenticated])
   );
-  
-  // Navigate to add note screen
-  const handleAddNote = () => {
-    navigation.navigate('AddNote');
+
+  const handleAddPersonalInfo = () => {
+    navigation.navigate('AddPersonalInfo');
   };
-  
-  // Navigate to note details screen
-  const handleViewNote = (note) => {
-    navigation.navigate('ViewNote', { id: note.id });
+
+  const handleViewPersonalInfo = (info: PersonalInfo) => {
+    navigation.navigate('ViewPersonalInfo', { id: info.id });
   };
-  
-  // Render empty state
+
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="document-text-outline" size={scale(60)} color="#CCCCCC" />
-      <Text style={styles.emptyTitle}>No Notes Yet</Text>
+      <Ionicons name="card-outline" size={scale(60)} color="#CCCCCC" />
+      <Text style={styles.emptyTitle}>No Personal Information Yet</Text>
       <Text style={styles.emptySubtitle}>
-        Add your first note by tapping the plus button below
+        Add your personal information like ID numbers, passports, and more
       </Text>
     </View>
   );
-  
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={notes}
+        data={personalInfo}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <NoteListItem
-            note={item}
-            onPress={() => handleViewNote(item)}
+          <PersonalInfoListItem
+            personalInfo={item}
+            onPress={() => handleViewPersonalInfo(item)}
           />
         )}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
       />
-      
-      <TouchableOpacity style={styles.addButton} onPress={handleAddNote}>
+
+      <TouchableOpacity style={styles.addButton} onPress={handleAddPersonalInfo}>
         <Ionicons name="add" size={scale(24)} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
@@ -111,7 +105,7 @@ const styles = StyleSheet.create({
     width: scale(56),
     height: scale(56),
     borderRadius: scale(28),
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FFC107',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,
@@ -122,4 +116,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default NotesList;
+export default PersonalInfoList;

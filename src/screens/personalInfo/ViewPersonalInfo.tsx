@@ -1,52 +1,49 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import useCredentialsStore from '../../store/credentialsStore';
+import usePersonalInfoStore from '../../store/personalInfoStore';
 import useSettingsStore from '../../store/settingsStore';
 import useAuth from '../../hooks/useAuth';
-import CredentialDetailItem from '../../components/features/credentials/CredentialDetailItem';
+import PersonalInfoDetailItem from '../../components/features/personalInfo/PersonalInfoDetailItem';
 import Button from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatters';
+import type { ScreenProps } from '../../types/navigation';
+import type { PersonalInfo } from '../../types/models';
 
-/**
- * View credential screen
- */
-const ViewCredential = ({ route, navigation }) => {
+const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, navigation }) => {
   const { id } = route.params;
-  const { credentials, getCredentialById, loadCredentials, deleteCredential, isLoading } = useCredentialsStore();
+  const { getPersonalInfoById, loadPersonalInfo, deletePersonalInfo, isLoading } = usePersonalInfoStore();
   const { settings } = useSettingsStore();
   const { isAuthenticated, updateLastActive } = useAuth();
-  const [credential, setCredential] = useState(null);
-  
-  // Check authentication and load credentials
+  const [info, setInfo] = useState<PersonalInfo | null>(null);
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace('Authentication');
       return;
     }
-    
+
     if (!id) {
       navigation.goBack();
       return;
     }
   }, [isAuthenticated, id, navigation]);
-  
-  // Load credential details when screen comes into focus
+
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
-        loadCredentials().then(() => {
-          const foundCredential = getCredentialById(id);
-          setCredential(foundCredential);
-          
-          if (!foundCredential) {
+        loadPersonalInfo().then(() => {
+          const foundInfo = getPersonalInfoById(id);
+          setInfo(foundInfo ?? null);
+
+          if (!foundInfo) {
             Alert.alert(
               'Error',
-              'Credential not found. It may have been deleted.',
+              'Personal information not found. It may have been deleted.',
               [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
           }
@@ -54,125 +51,139 @@ const ViewCredential = ({ route, navigation }) => {
       }
     }, [isAuthenticated, id])
   );
-  
-  // Handle clipboard copy
-  const handleCopy = (value, label) => {
+
+  const getIconName = (): React.ComponentProps<typeof Ionicons>['name'] => {
+    if (!info) return 'person-outline';
+
+    const type = info.type?.toLowerCase() || '';
+
+    if (type.includes('passport')) return 'document-outline';
+    if (type.includes('license')) return 'car-outline';
+    if (type.includes('id') || type.includes('card')) return 'card-outline';
+    if (type.includes('tax')) return 'cash-outline';
+
+    return 'person-outline';
+  };
+
+  const handleCopy = (value: string | undefined, label: string) => {
+    if (!value) return;
     Clipboard.setString(value);
     Alert.alert('Copied', `${label} copied to clipboard.`);
   };
-  
-  // Handle credential deletion
+
   const handleDelete = () => {
     Alert.alert(
-      'Delete Credential',
-      'Are you sure you want to delete this credential? This action cannot be undone.',
+      'Delete Personal Information',
+      'Are you sure you want to delete this information? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteCredential(id);
+              await deletePersonalInfo(id);
               navigation.goBack();
-            } catch (error) {
+            } catch {
               Alert.alert(
                 'Error',
-                'Failed to delete the credential. Please try again.',
+                'Failed to delete the information. Please try again.',
                 [{ text: 'OK' }]
               );
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
-  
-  // Handle credential edit (placeholder for future implementation)
+
   const handleEdit = () => {
-    // This will be implemented in a future version
     Alert.alert(
       'Coming Soon',
-      'Editing credentials will be available in a future update.',
+      'Editing personal information will be available in a future update.',
       [{ text: 'OK' }]
     );
   };
-  
-  // If credential is not loaded yet
-  if (!credential) {
+
+  if (!info) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading credential...</Text>
+        <Text>Loading information...</Text>
       </View>
     );
   }
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.iconContainer}>
-          <Ionicons 
-            name={credential.website ? 'globe-outline' : 'key-outline'} 
-            size={scale(28)} 
-            color="#FFFFFF" 
-          />
+          <Ionicons name={getIconName()} size={scale(28)} color="#FFFFFF" />
         </View>
-        <Text style={styles.title}>{credential.title}</Text>
+        <Text style={styles.title}>{info.title}</Text>
+        <Text style={styles.subtitle}>{info.type}</Text>
       </View>
-      
+
       <View style={styles.detailsContainer}>
-        <CredentialDetailItem
-          label="Username / Email"
-          value={credential.username}
-          onCopy={() => handleCopy(credential.username, 'Username')}
-        />
-        
-        <CredentialDetailItem
-          label="Password"
-          value={credential.password}
+        <PersonalInfoDetailItem
+          label="Identifier"
+          value={info.identifier}
           isSensitive={settings.maskSensitiveData}
-          onCopy={() => handleCopy(credential.password, 'Password')}
+          onCopy={() => handleCopy(info.identifier, 'Identifier')}
         />
-        
-        <CredentialDetailItem
-          label="Website"
-          value={credential.website}
-          onCopy={() => handleCopy(credential.website, 'Website')}
-        />
-        
-        {credential.notes && (
+
+        {info.issueDate && (
+          <PersonalInfoDetailItem
+            label="Issue Date"
+            value={info.issueDate}
+            onCopy={() => handleCopy(info.issueDate, 'Issue Date')}
+          />
+        )}
+
+        {info.expiryDate && (
+          <PersonalInfoDetailItem
+            label="Expiry Date"
+            value={info.expiryDate}
+            onCopy={() => handleCopy(info.expiryDate, 'Expiry Date')}
+          />
+        )}
+
+        {info.issuingAuthority && (
+          <PersonalInfoDetailItem
+            label="Issuing Authority"
+            value={info.issuingAuthority}
+            onCopy={() => handleCopy(info.issuingAuthority, 'Issuing Authority')}
+          />
+        )}
+
+        {info.notes && (
           <View style={styles.notesContainer}>
             <Text style={styles.notesLabel}>Notes</Text>
             <View style={styles.notesContent}>
-              <Text style={styles.notesText}>{credential.notes}</Text>
+              <Text style={styles.notesText}>{info.notes}</Text>
             </View>
           </View>
         )}
-        
+
         <View style={styles.metadataContainer}>
           <Text style={styles.metadataLabel}>Created: </Text>
           <Text style={styles.metadataValue}>
-            {formatDate(credential.createdAt, 'medium')}
+            {formatDate(info.createdAt, 'medium')}
           </Text>
         </View>
-        
+
         <View style={styles.metadataContainer}>
           <Text style={styles.metadataLabel}>Last Updated: </Text>
           <Text style={styles.metadataValue}>
-            {formatDate(credential.updatedAt, 'medium')}
+            {formatDate(info.updatedAt, 'medium')}
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.actionsContainer}>
-        <Button
-          variant="outline"
-          style={styles.actionButton}
-          onPress={handleEdit}
-        >
+        <Button variant="outline" style={styles.actionButton} onPress={handleEdit}>
           Edit
         </Button>
-        
+
         <Button
           variant="danger"
           style={styles.actionButton}
@@ -206,7 +217,7 @@ const styles = StyleSheet.create({
     width: scale(60),
     height: scale(60),
     borderRadius: scale(12),
-    backgroundColor: '#006E90',
+    backgroundColor: '#FFC107',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: scale(12),
@@ -215,6 +226,11 @@ const styles = StyleSheet.create({
     fontSize: scale(20),
     fontWeight: '600',
     color: '#333333',
+    marginBottom: scale(4),
+  },
+  subtitle: {
+    fontSize: scale(14),
+    color: '#666666',
   },
   detailsContainer: {
     padding: scale(16),
@@ -262,4 +278,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ViewCredential;
+export default ViewPersonalInfo;

@@ -8,78 +8,80 @@ import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { checkPasswordStrength } from '../../utils/encryption';
-import { validateFields } from '../../utils/validation';
+import { validateFields, ValidationRules } from '../../utils/validation';
+import type { ScreenProps } from '../../types/navigation';
+import type { CredentialInput } from '../../types/models';
 
-/**
- * Add credential screen
- */
-const AddCredential = ({ navigation }) => {
+type FormData = Required<Pick<CredentialInput, 'title'>> & {
+  username: string;
+  password: string;
+  website: string;
+  notes: string;
+};
+
+type FormErrors = Partial<Record<keyof FormData, string>>;
+
+const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation }) => {
   const { addCredential, isLoading } = useCredentialsStore();
   const { updateLastActive } = useAuth();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     title: '',
     username: '',
     password: '',
     website: '',
     notes: '',
   });
-  const [formErrors, setFormErrors] = useState({});
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [passwordStrength, setPasswordStrength] = useState(0);
-  
-  // Update form data
-  const handleChange = (field, value) => {
+
+  const handleChange = (field: keyof FormData, value: string) => {
     updateLastActive();
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
-    
-    // Calculate password strength if password field is updated
+
     if (field === 'password') {
       setPasswordStrength(checkPasswordStrength(value));
     }
-    
-    // Clear error for the field when user edits it
+
     if (formErrors[field]) {
-      setFormErrors(prev => ({
+      setFormErrors((prev) => ({
         ...prev,
-        [field]: ''
+        [field]: '',
       }));
     }
   };
-  
-  // Get password strength color
-  const getStrengthColor = () => {
+
+  const getStrengthColor = (): string => {
     if (passwordStrength < 30) return '#F44336';
     if (passwordStrength < 60) return '#FFC107';
     return '#4CAF50';
   };
-  
-  // Save credential
+
   const handleSave = async () => {
     updateLastActive();
-    
-    // Validate form
-    const validationRules = {
+
+    const validationRules: ValidationRules<FormData> = {
       title: { required: true, maxLength: 100 },
       username: { maxLength: 100 },
       password: { maxLength: 100 },
       website: { maxLength: 200 },
       notes: { maxLength: 500 },
     };
-    
+
     const { isValid, errors } = validateFields(formData, validationRules);
-    
+
     if (!isValid) {
       setFormErrors(errors);
       return;
     }
-    
+
     try {
       await addCredential(formData);
       navigation.goBack();
-    } catch (error) {
+    } catch {
       Alert.alert(
         'Error Saving Credential',
         'An error occurred while saving your credential. Please try again.',
@@ -87,11 +89,10 @@ const AddCredential = ({ navigation }) => {
       );
     }
   };
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.formContainer}>
-        {/* Title */}
         <Input
           label="Title"
           value={formData.title}
@@ -100,8 +101,7 @@ const AddCredential = ({ navigation }) => {
           error={!!formErrors.title}
           helperText={formErrors.title}
         />
-        
-        {/* Username */}
+
         <Input
           label="Username / Email"
           value={formData.username}
@@ -110,8 +110,7 @@ const AddCredential = ({ navigation }) => {
           error={!!formErrors.username}
           helperText={formErrors.username}
         />
-        
-        {/* Password */}
+
         <View style={styles.passwordContainer}>
           <Input
             label="Password"
@@ -123,19 +122,19 @@ const AddCredential = ({ navigation }) => {
             error={!!formErrors.password}
             helperText={formErrors.password}
           />
-          
+
           {formData.password.length > 0 && (
             <View style={styles.strengthContainer}>
               <Text style={styles.strengthLabel}>Strength:</Text>
               <View style={styles.strengthBarContainer}>
-                <View 
+                <View
                   style={[
-                    styles.strengthBar, 
-                    { 
-                      width: `${passwordStrength}%`, 
-                      backgroundColor: getStrengthColor() 
-                    }
-                  ]} 
+                    styles.strengthBar,
+                    {
+                      width: `${passwordStrength}%`,
+                      backgroundColor: getStrengthColor(),
+                    },
+                  ]}
                 />
               </View>
               <TouchableOpacity style={styles.generateButton}>
@@ -144,8 +143,7 @@ const AddCredential = ({ navigation }) => {
             </View>
           )}
         </View>
-        
-        {/* Website */}
+
         <Input
           label="Website (optional)"
           value={formData.website}
@@ -154,8 +152,7 @@ const AddCredential = ({ navigation }) => {
           error={!!formErrors.website}
           helperText={formErrors.website}
         />
-        
-        {/* Notes */}
+
         <Input
           label="Notes (optional)"
           value={formData.notes}
@@ -165,8 +162,7 @@ const AddCredential = ({ navigation }) => {
           error={!!formErrors.notes}
           helperText={formErrors.notes}
         />
-        
-        {/* Buttons */}
+
         <View style={styles.buttonsContainer}>
           <Button
             variant="outline"
@@ -175,7 +171,7 @@ const AddCredential = ({ navigation }) => {
           >
             Cancel
           </Button>
-          
+
           <Button
             style={styles.button}
             onPress={handleSave}

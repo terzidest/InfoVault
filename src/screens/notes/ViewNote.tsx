@@ -1,45 +1,41 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Share } from 'react-native';
 import { scale } from 'react-native-size-matters';
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
 import useNotesStore from '../../store/notesStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatters';
+import type { ScreenProps } from '../../types/navigation';
+import type { Note } from '../../types/models';
 
-/**
- * View note screen
- */
-const ViewNote = ({ route, navigation }) => {
+const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
   const { id } = route.params;
-  const { notes, getNoteById, loadNotes, deleteNote, isLoading } = useNotesStore();
+  const { getNoteById, loadNotes, deleteNote, isLoading } = useNotesStore();
   const { isAuthenticated, updateLastActive } = useAuth();
-  const [note, setNote] = useState(null);
-  
-  // Check authentication and load data
+  const [note, setNote] = useState<Note | null>(null);
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace('Authentication');
       return;
     }
-    
+
     if (!id) {
       navigation.goBack();
       return;
     }
   }, [isAuthenticated, id, navigation]);
-  
-  // Load note details when screen comes into focus
+
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
         loadNotes().then(() => {
           const foundNote = getNoteById(id);
-          setNote(foundNote);
-          
+          setNote(foundNote ?? null);
+
           if (!foundNote) {
             Alert.alert(
               'Error',
@@ -51,13 +47,12 @@ const ViewNote = ({ route, navigation }) => {
       }
     }, [isAuthenticated, id])
   );
-  
-  // Get category color
-  const getCategoryColor = () => {
+
+  const getCategoryColor = (): string => {
     if (!note) return '#9C27B0';
-    
+
     const category = note.category?.toLowerCase() || '';
-    
+
     switch (category) {
       case 'personal':
         return '#4CAF50';
@@ -71,58 +66,53 @@ const ViewNote = ({ route, navigation }) => {
         return '#9C27B0';
     }
   };
-  
-  // Handle note share (plain text only)
+
   const handleShare = async () => {
     if (!note) return;
-    
+
     try {
       await Share.share({
         message: `${note.title}\n\n${note.content}\n\nShared from InfoVault`,
       });
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to share note');
     }
   };
-  
-  // Handle note deletion
+
   const handleDelete = () => {
     Alert.alert(
       'Delete Note',
       'Are you sure you want to delete this note? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteNote(id);
               navigation.goBack();
-            } catch (error) {
+            } catch {
               Alert.alert(
                 'Error',
                 'Failed to delete the note. Please try again.',
                 [{ text: 'OK' }]
               );
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
-  
-  // Handle note edit (placeholder for future implementation)
+
   const handleEdit = () => {
-    // This will be implemented in a future version
     Alert.alert(
       'Coming Soon',
       'Editing notes will be available in a future update.',
       [{ text: 'OK' }]
     );
   };
-  
-  // If note is not loaded yet
+
   if (!note) {
     return (
       <View style={styles.loadingContainer}>
@@ -130,56 +120,43 @@ const ViewNote = ({ route, navigation }) => {
       </View>
     );
   }
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{note.title}</Text>
-        
+
         <View style={styles.metaContainer}>
-          <View 
+          <View
             style={[
-              styles.categoryBadge, 
-              { backgroundColor: getCategoryColor() + '30' }
+              styles.categoryBadge,
+              { backgroundColor: getCategoryColor() + '30' },
             ]}
           >
-            <Text 
-              style={[
-                styles.categoryText,
-                { color: getCategoryColor() }
-              ]}
-            >
+            <Text style={[styles.categoryText, { color: getCategoryColor() }]}>
               {note.category}
             </Text>
           </View>
-          
+
           <Text style={styles.dateText}>
             {formatDate(note.updatedAt, 'medium')}
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.contentContainer}>
         <Text style={styles.content}>{note.content}</Text>
       </View>
-      
+
       <View style={styles.actionsContainer}>
-        <Button
-          variant="outline"
-          style={styles.actionButton}
-          onPress={handleEdit}
-        >
+        <Button variant="outline" style={styles.actionButton} onPress={handleEdit}>
           Edit
         </Button>
-        
-        <Button
-          variant="outline"
-          style={styles.actionButton}
-          onPress={handleShare}
-        >
+
+        <Button variant="outline" style={styles.actionButton} onPress={handleShare}>
           Share
         </Button>
-        
+
         <Button
           variant="danger"
           style={styles.actionButton}

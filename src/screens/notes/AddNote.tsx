@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Picker } from '@react-native-picker/picker';
 
@@ -7,63 +7,65 @@ import useNotesStore from '../../store/notesStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import { validateFields } from '../../utils/validation';
+import { validateFields, ValidationRules } from '../../utils/validation';
+import type { ScreenProps } from '../../types/navigation';
 
-/**
- * Add note screen
- */
-const AddNote = ({ navigation }) => {
+interface FormData {
+  title: string;
+  content: string;
+  category: string;
+}
+
+type FormErrors = Partial<Record<keyof FormData, string>>;
+
+const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation }) => {
   const { addNote, categories, isLoading } = useNotesStore();
   const { updateLastActive } = useAuth();
-  
-  const [formData, setFormData] = useState({
+
+  const [formData, setFormData] = useState<FormData>({
     title: '',
     content: '',
     category: 'Personal',
   });
-  
-  const [formErrors, setFormErrors] = useState({});
-  
-  // Update form data
-  const handleChange = (field, value) => {
+
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const handleChange = (field: keyof FormData, value: string) => {
     updateLastActive();
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
-    
-    // Clear error for the field when user edits it
+
     if (formErrors[field]) {
-      setFormErrors(prev => ({
+      setFormErrors((prev) => ({
         ...prev,
-        [field]: ''
+        [field]: '',
       }));
     }
   };
-  
-  // Save note
+
   const handleSave = async () => {
     updateLastActive();
-    
-    // Validate form
-    const validationRules = {
+
+    const validationRules: ValidationRules<FormData> = {
       title: { required: true, maxLength: 100 },
       content: { required: true, maxLength: 10000 },
       category: { required: true },
     };
-    
+
     const { isValid, errors } = validateFields(formData, validationRules);
-    
+
     if (!isValid) {
       setFormErrors(errors);
       return;
     }
-    
+
     try {
       await addNote(formData);
       navigation.goBack();
-    } catch (error) {
+    } catch {
       Alert.alert(
         'Error Saving Note',
         'An error occurred while saving your note. Please try again.',
@@ -71,11 +73,10 @@ const AddNote = ({ navigation }) => {
       );
     }
   };
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.formContainer}>
-        {/* Title */}
         <Input
           label="Title"
           value={formData.title}
@@ -84,8 +85,7 @@ const AddNote = ({ navigation }) => {
           error={!!formErrors.title}
           helperText={formErrors.title}
         />
-        
-        {/* Category */}
+
         <View style={styles.pickerContainer}>
           <Text style={styles.label}>Category</Text>
           <View style={[styles.pickerWrapper, !!formErrors.category && styles.pickerError]}>
@@ -104,8 +104,7 @@ const AddNote = ({ navigation }) => {
             <Text style={styles.errorText}>{formErrors.category}</Text>
           )}
         </View>
-        
-        {/* Content */}
+
         <Input
           label="Note Content"
           value={formData.content}
@@ -116,8 +115,7 @@ const AddNote = ({ navigation }) => {
           error={!!formErrors.content}
           helperText={formErrors.content}
         />
-        
-        {/* Buttons */}
+
         <View style={styles.buttonsContainer}>
           <Button
             variant="outline"
@@ -126,7 +124,7 @@ const AddNote = ({ navigation }) => {
           >
             Cancel
           </Button>
-          
+
           <Button
             style={styles.button}
             onPress={handleSave}
