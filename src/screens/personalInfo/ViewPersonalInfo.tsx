@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -65,9 +66,9 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
     return 'person-outline';
   };
 
-  const handleCopy = (value: string | undefined, label: string) => {
+  const handleCopy = async (value: string | undefined, label: string) => {
     if (!value) return;
-    Clipboard.setString(value);
+    await Clipboard.setStringAsync(value);
     Alert.alert('Copied', `${label} copied to clipboard.`);
   };
 
