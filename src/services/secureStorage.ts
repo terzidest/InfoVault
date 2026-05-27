@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import type { StorageType, StoredItem } from '../types/storage';
+import type { StorageType } from '../types/storage';
 
 export const saveToSecureStore = async (
   key: string,
@@ -18,12 +18,6 @@ export const saveToSecureStore = async (
       parsedKeys.push(key);
       await SecureStore.setItemAsync(type + 'Keys', JSON.stringify(parsedKeys));
     }
-
-    const metadata = {
-      lastModified: new Date().toISOString(),
-      type,
-    };
-    await SecureStore.setItemAsync(key + '_metadata', JSON.stringify(metadata));
 
     return true;
   } catch (error) {
@@ -53,7 +47,6 @@ export async function getFromSecureStore<T = unknown>(
 export const deleteFromSecureStore = async (key: string, type: StorageType): Promise<boolean> => {
   try {
     await SecureStore.deleteItemAsync(key);
-    await SecureStore.deleteItemAsync(key + '_metadata');
 
     const keys = (await SecureStore.getItemAsync(type + 'Keys')) || '[]';
     const parsedKeys: string[] = JSON.parse(keys);
@@ -77,24 +70,14 @@ export const getKeysByType = async (type: StorageType): Promise<string[]> => {
   }
 };
 
-export const getAllItemsByType = async <T = unknown>(type: StorageType): Promise<StoredItem<T>[]> => {
+export const getAllItemsByType = async <T = unknown>(type: StorageType): Promise<T[]> => {
   try {
     const keys = await getKeysByType(type);
-    const items: StoredItem<T>[] = [];
+    const items: T[] = [];
 
     for (const key of keys) {
       const item = await getFromSecureStore<T>(key);
-      const metadata = await getFromSecureStore<{ lastModified: string; type: StorageType }>(
-        key + '_metadata'
-      );
-
-      if (item && metadata) {
-        items.push({
-          key,
-          data: item,
-          ...metadata,
-        });
-      }
+      if (item) items.push(item);
     }
 
     return items;

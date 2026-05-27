@@ -31,9 +31,7 @@ const useNotesStore = create<NotesState>((set, get) => ({
   loadNotes: async () => {
     set({ isLoading: true, error: null });
     try {
-      // See note in credentialsStore: getAllItemsByType returns wrapper objects,
-      // but downstream code consumes the flat Note shape.
-      const notes = (await getAllItemsByType<Note>('note')) as unknown as Note[];
+      const notes = await getAllItemsByType<Note>('note');
       set({ notes, isLoading: false });
       return notes;
     } catch (error) {

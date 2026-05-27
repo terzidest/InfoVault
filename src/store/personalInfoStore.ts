@@ -28,9 +28,7 @@ const usePersonalInfoStore = create<PersonalInfoState>((set, get) => ({
   loadPersonalInfo: async () => {
     set({ isLoading: true, error: null });
     try {
-      // See note in credentialsStore: getAllItemsByType returns wrapper objects,
-      // but downstream code consumes the flat PersonalInfo shape.
-      const personalInfo = (await getAllItemsByType<PersonalInfo>('personalInfo')) as unknown as PersonalInfo[];
+      const personalInfo = await getAllItemsByType<PersonalInfo>('personalInfo');
       set({ personalInfo, isLoading: false });
       return personalInfo;
     } catch (error) {
