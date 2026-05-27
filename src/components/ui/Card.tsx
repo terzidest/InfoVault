@@ -1,19 +1,21 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-/**
- * Reusable Card component for displaying information
- * 
- * @param {string} title - Card title
- * @param {node} children - Card content
- * @param {string} variant - 'default', 'outlined', 'elevated', 'accent'
- * @param {boolean} onPress - Makes card touchable and calls this function on press
- * @param {object} style - Additional style overrides
- * @param {string} icon - Optional icon name (Ionicons)
- * @param {string} iconColor - Optional icon color
- */
-const Card = ({
+type CardVariant = 'default' | 'outlined' | 'elevated' | 'accent';
+
+interface CardProps {
+  title?: string;
+  children?: React.ReactNode;
+  variant?: CardVariant;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+  className?: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  iconColor?: string;
+}
+
+const Card: React.FC<CardProps> = ({
   title,
   children,
   variant = 'default',
@@ -24,10 +26,9 @@ const Card = ({
   iconColor,
   ...props
 }) => {
-  // Get card style based on variant
-  const getCardClassNames = () => {
-    const baseClasses = "rounded-lg my-2 overflow-hidden";
-    
+  const getCardClassNames = (): string => {
+    const baseClasses = 'rounded-lg my-2 overflow-hidden';
+
     switch (variant) {
       case 'outlined':
         return `${baseClasses} bg-white border border-gray-200`;
@@ -39,18 +40,17 @@ const Card = ({
         return `${baseClasses} bg-white`;
     }
   };
-  
-  // Render card content
+
   const renderContent = () => (
     <View className="p-4">
       {(title || icon) && (
         <View className="flex-row items-center mb-2">
           {icon && (
-            <Ionicons 
-              name={icon} 
-              size={20} 
-              color={iconColor || '#FFC107'} 
-              style={{ marginRight: 8 }} 
+            <Ionicons
+              name={icon}
+              size={20}
+              color={iconColor || '#FFC107'}
+              style={{ marginRight: 8 }}
             />
           )}
           {title && (
@@ -61,10 +61,9 @@ const Card = ({
       <View>{children}</View>
     </View>
   );
-  
+
   const cardClassNames = `${getCardClassNames()} ${className || ''}`;
-  
-  // If onPress is provided, make the card touchable
+
   if (onPress) {
     return (
       <TouchableOpacity
@@ -78,8 +77,7 @@ const Card = ({
       </TouchableOpacity>
     );
   }
-  
-  // Otherwise render a regular view
+
   return (
     <View className={cardClassNames} style={style} {...props}>
       {renderContent()}

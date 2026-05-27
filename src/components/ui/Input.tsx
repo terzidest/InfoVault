@@ -1,22 +1,29 @@
 import React, { useState } from 'react';
-import { View, TextInput, Text, TouchableOpacity } from 'react-native';
+import {
+  View,
+  TextInput,
+  Text,
+  TouchableOpacity,
+  StyleProp,
+  ViewStyle,
+  TextInputProps,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-/**
- * Reusable Input component
- * 
- * @param {string} label - Input label
- * @param {string} value - Input value
- * @param {function} onChangeText - Text change handler
- * @param {string} placeholder - Placeholder text
- * @param {boolean} secure - Enable secure text entry for passwords
- * @param {boolean} error - Show error state
- * @param {string} helperText - Helper or error text to display below input
- * @param {boolean} multiline - Enable multiline input
- * @param {object} style - Additional style overrides
- * @param {boolean} sensitive - Indicate if the field contains sensitive data
- */
-const Input = ({
+interface InputProps extends Omit<TextInputProps, 'style'> {
+  label?: string;
+  value?: string;
+  onChangeText?: (text: string) => void;
+  placeholder?: string;
+  secure?: boolean;
+  error?: boolean;
+  helperText?: string;
+  multiline?: boolean;
+  style?: StyleProp<ViewStyle>;
+  sensitive?: boolean;
+}
+
+const Input: React.FC<InputProps> = ({
   label,
   value,
   onChangeText,
@@ -30,7 +37,7 @@ const Input = ({
   ...props
 }) => {
   const [secureTextEntry, setSecureTextEntry] = useState(secure);
-  
+
   return (
     <View className="mb-4" style={style}>
       {label && (
@@ -38,7 +45,7 @@ const Input = ({
           <Text className={`text-sm font-medium ${error ? 'text-danger' : 'text-dark'} mr-2`}>
             {label}
           </Text>
-          
+
           {sensitive && (
             <View className="bg-secondary px-1.5 py-0.5 rounded">
               <Text className="text-xs font-semibold text-dark">Sensitive</Text>
@@ -46,7 +53,7 @@ const Input = ({
           )}
         </View>
       )}
-      
+
       <View className="relative">
         <TextInput
           className={`
@@ -63,7 +70,7 @@ const Input = ({
           textAlignVertical={multiline ? 'top' : 'center'}
           {...props}
         />
-        
+
         {secure && (
           <TouchableOpacity
             className="absolute right-3 top-1/2 -mt-2.5"
@@ -77,7 +84,7 @@ const Input = ({
           </TouchableOpacity>
         )}
       </View>
-      
+
       {helperText && (
         <Text className={`text-xs mt-1 ml-0.5 ${error ? 'text-danger' : 'text-gray-500'}`}>
           {helperText}
