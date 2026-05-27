@@ -1,12 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
+import type { PremiumFeature } from '../types/models';
 
 const PREMIUM_STATUS_KEY = 'premiumStatus';
 
-/**
- * Check if user has premium status
- * @returns {Promise<boolean>} Premium status
- */
-export const checkPremiumStatus = async () => {
+export const checkPremiumStatus = async (): Promise<boolean> => {
   try {
     const status = await SecureStore.getItemAsync(PREMIUM_STATUS_KEY);
     return status === 'true';
@@ -16,12 +13,7 @@ export const checkPremiumStatus = async () => {
   }
 };
 
-/**
- * Set premium status (for future implementation)
- * @param {boolean} status - Premium status to set
- * @returns {Promise<void>}
- */
-export const setPremiumStatus = async (status) => {
+export const setPremiumStatus = async (status: boolean): Promise<void> => {
   try {
     await SecureStore.setItemAsync(PREMIUM_STATUS_KEY, status ? 'true' : 'false');
   } catch (error) {
@@ -30,11 +22,7 @@ export const setPremiumStatus = async (status) => {
   }
 };
 
-/**
- * Get available premium features
- * @returns {Array} List of premium features
- */
-export const getPremiumFeatures = () => {
+export const getPremiumFeatures = (): PremiumFeature[] => {
   return [
     {
       id: 'cloud_backup',
@@ -59,6 +47,6 @@ export const getPremiumFeatures = () => {
       name: 'Advanced Search',
       description: 'Enhanced search capabilities across all your data',
       available: false,
-    }
+    },
   ];
 };

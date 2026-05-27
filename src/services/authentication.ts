@@ -1,26 +1,18 @@
 import * as LocalAuthentication from 'expo-local-authentication';
+import type { AuthTypes } from '../types/models';
 
-/**
- * Authenticate the user using biometrics or PIN
- * @returns {Promise<boolean>} Authentication result
- */
-export const authenticate = async () => {
+export const authenticate = async (): Promise<boolean> => {
   try {
-    // Check if hardware supports biometric
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     if (!hasHardware) {
       console.warn('Biometric hardware not available');
-      // Proceed to fallback
     }
 
-    // Check if biometrics are enrolled
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     if (!isEnrolled && hasHardware) {
       console.warn('No biometric credentials enrolled');
-      // Proceed to fallback
     }
 
-    // Authenticate
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: 'Authenticate to access your vault',
       fallbackLabel: 'Use PIN/Password',
@@ -34,16 +26,12 @@ export const authenticate = async () => {
   }
 };
 
-/**
- * Check available authentication types
- * @returns {Promise<Object>} Available authentication types
- */
-export const checkAuthenticationTypes = async () => {
+export const checkAuthenticationTypes = async (): Promise<AuthTypes> => {
   try {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const isEnrolled = hasHardware ? await LocalAuthentication.isEnrolledAsync() : false;
     const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-    
+
     return {
       hasHardware,
       isEnrolled,
