@@ -28,10 +28,7 @@ const useCredentialsStore = create<CredentialsState>((set, get) => ({
   loadCredentials: async () => {
     set({ isLoading: true, error: null });
     try {
-      // Note: getAllItemsByType returns { key, data, lastModified, type } wrappers,
-      // but the rest of the app consumes flat Credential objects. Preserving the
-      // existing runtime behavior here; the shape is treated as Credential[] downstream.
-      const credentials = (await getAllItemsByType<Credential>('credential')) as unknown as Credential[];
+      const credentials = await getAllItemsByType<Credential>('credential');
       set({ credentials, isLoading: false });
       return credentials;
     } catch (error) {
