@@ -31,7 +31,7 @@ InfoVault is a secure personal information management application built with Rea
 
 ### Prerequisites
 
-- Node.js (v14+)
+- Node.js (v18+)
 - npm or yarn
 
 
@@ -76,7 +76,7 @@ info_vault/
 │   ├── services/                 # Core services (auth, storage)
 │   ├── utils/                    # Utility functions
 │   └── hooks/                    # Custom React hooks
-├── App.jsx                       # Application entry point
+├── App.tsx                       # Application entry point
 ├── babel.config.js               # Babel configuration
 ├── app.json                      # Expo configuration
 └── package.json                  # Dependencies
@@ -85,6 +85,7 @@ info_vault/
 ## Technology Stack
 
 - **React Native**: Core framework for cross-platform mobile development
+- **TypeScript**: Strict, fully typed codebase
 - **Expo**: Development platform and toolchain
 - **NativeWind**: Utility-first CSS framework based on Tailwind
 - **Zustand**: Lightweight state management

@@ -29,42 +29,6 @@ export const formatDate = (date: string | Date | null | undefined, format: DateF
   });
 };
 
-export const formatCardNumber = (cardNumber: string | undefined | null): string => {
-  if (!cardNumber) return '';
-
-  const sanitized = cardNumber.replace(/\s/g, '');
-  const parts: string[] = [];
-
-  for (let i = 0; i < sanitized.length; i += 4) {
-    parts.push(sanitized.substring(i, i + 4));
-  }
-
-  return parts.join(' ');
-};
-
-export const formatCardNumberMasked = (cardNumber: string | undefined | null): string => {
-  if (!cardNumber) return '';
-
-  const sanitized = cardNumber.replace(/\s/g, '');
-
-  if (sanitized.length <= 4) return sanitized;
-
-  const lastFour = sanitized.slice(-4);
-  const maskedPart = '•••• '.repeat(Math.floor((sanitized.length - 4) / 4));
-
-  return `${maskedPart}${lastFour}`;
-};
-
-export const formatPhoneNumber = (phoneNumber: string | undefined | null): string => {
-  if (!phoneNumber) return '';
-
-  const sanitized = phoneNumber.replace(/\D/g, '');
-
-  if (sanitized.length < 10) return sanitized;
-
-  return `(${sanitized.slice(0, 3)}) ${sanitized.slice(3, 6)}-${sanitized.slice(6, 10)}`;
-};
-
 export const truncateText = (text: string | undefined | null, maxLength = 50): string => {
   if (!text) return '';
   if (text.length <= maxLength) return text;

@@ -7,7 +7,7 @@ import useCredentialsStore from '../../store/credentialsStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import { checkPasswordStrength } from '../../utils/encryption';
+import { checkPasswordStrength } from '../../utils/crypto';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
 import type { CredentialInput } from '../../types/models';
