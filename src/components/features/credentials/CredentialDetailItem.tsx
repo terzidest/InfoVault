@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { obfuscateText } from '../../../utils/encryption';
+import { obfuscateText } from '../../../utils/masking';
 
 interface CredentialDetailItemProps {
   label: string;
