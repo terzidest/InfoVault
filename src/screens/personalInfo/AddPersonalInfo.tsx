@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
-import { Picker } from '@react-native-picker/picker';
 
 import usePersonalInfoStore from '../../store/personalInfoStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
 
@@ -27,7 +27,6 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation 
   const { updateLastActive } = useAuth();
 
   const infoTypes = [
-    { label: 'Select Type...', value: '' },
     { label: 'Passport', value: 'Passport' },
     { label: "Driver's License", value: "Driver's License" },
     { label: 'ID Card', value: 'ID Card' },
@@ -125,24 +124,15 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation 
           helperText={formErrors.title}
         />
 
-        <View style={styles.pickerContainer}>
-          <Text style={styles.label}>Type</Text>
-          <View style={[styles.pickerWrapper, !!formErrors.type && styles.pickerError]}>
-            <Picker
-              selectedValue={formData.type}
-              onValueChange={(value) => handleChange('type', value)}
-              style={styles.picker}
-              mode="dropdown"
-            >
-              {infoTypes.map((type, index) => (
-                <Picker.Item key={index} label={type.label} value={type.value} />
-              ))}
-            </Picker>
-          </View>
-          {formErrors.type && (
-            <Text style={styles.errorText}>{formErrors.type}</Text>
-          )}
-        </View>
+        <Select
+          label="Type"
+          value={formData.type}
+          onValueChange={(value) => handleChange('type', value)}
+          options={infoTypes}
+          placeholder="Select Type..."
+          error={!!formErrors.type}
+          helperText={formErrors.type}
+        />
 
         <Input
           label="Identifier Number"
@@ -204,7 +194,7 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation 
             style={styles.button}
             onPress={handleSave}
             isLoading={isLoading}
-            disabled={isLoading || !formData.title || !formData.type || !formData.identifier}
+            disabled={isLoading || !formData.title}
           >
             Save Information
           </Button>
@@ -221,35 +211,6 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     padding: scale(16),
-  },
-  pickerContainer: {
-    marginBottom: scale(16),
-  },
-  label: {
-    fontSize: scale(14),
-    fontWeight: '500',
-    color: '#333333',
-    marginBottom: scale(6),
-  },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: scale(8),
-    backgroundColor: '#F5F5F5',
-    overflow: 'hidden',
-  },
-  pickerError: {
-    borderColor: '#F44336',
-  },
-  picker: {
-    height: scale(44),
-    width: '100%',
-  },
-  errorText: {
-    fontSize: scale(12),
-    color: '#F44336',
-    marginTop: scale(4),
-    marginLeft: scale(2),
   },
   buttonsContainer: {
     flexDirection: 'row',

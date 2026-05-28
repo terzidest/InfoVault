@@ -3,11 +3,11 @@ import { View, Text, StyleSheet, ScrollView, Switch, Alert, TouchableOpacity } f
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
 
 import useSettingsStore from '../../store/settingsStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
+import Select from '../../components/ui/Select';
 import type { ScreenProps } from '../../types/navigation';
 import type { Settings as SettingsType } from '../../types/models';
 
@@ -150,40 +150,13 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
               Automatically lock after a period of inactivity
             </Text>
           </View>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={settings.autoLockTimeout}
+          <View style={styles.pickerSpacing}>
+            <Select
+              value={settings.autoLockTimeout}
               onValueChange={handleTimeoutChange}
-              style={styles.picker}
-              mode="dropdown"
-            >
-              {timeoutOptions.map((option, index) => (
-                <Picker.Item key={index} label={option.label} value={option.value} />
-              ))}
-            </Picker>
+              options={timeoutOptions}
+            />
           </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Appearance</Text>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Dark Theme</Text>
-            <Text style={styles.settingDescription}>
-              Use dark colors throughout the app (Coming Soon)
-            </Text>
-          </View>
-          <Switch
-            value={settings.theme === 'dark'}
-            onValueChange={() => {
-              Alert.alert('Coming Soon', 'Dark theme will be available in a future update.');
-            }}
-            trackColor={{ false: '#CCCCCC', true: '#4CAF50' }}
-            thumbColor="#FFFFFF"
-            disabled={true}
-          />
         </View>
       </View>
 
@@ -276,17 +249,8 @@ const styles = StyleSheet.create({
     fontSize: scale(12),
     color: '#666666',
   },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: scale(8),
-    backgroundColor: '#F5F5F5',
-    overflow: 'hidden',
+  pickerSpacing: {
     marginTop: scale(8),
-  },
-  picker: {
-    height: scale(44),
-    width: '100%',
   },
   premiumBanner: {
     flexDirection: 'row',
