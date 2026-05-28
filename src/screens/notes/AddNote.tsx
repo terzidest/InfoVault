@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
-import { Picker } from '@react-native-picker/picker';
 
 import useNotesStore from '../../store/notesStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
 
@@ -86,24 +86,14 @@ const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation }) => {
           helperText={formErrors.title}
         />
 
-        <View style={styles.pickerContainer}>
-          <Text style={styles.label}>Category</Text>
-          <View style={[styles.pickerWrapper, !!formErrors.category && styles.pickerError]}>
-            <Picker
-              selectedValue={formData.category}
-              onValueChange={(value) => handleChange('category', value)}
-              style={styles.picker}
-              mode="dropdown"
-            >
-              {categories.map((category, index) => (
-                <Picker.Item key={index} label={category} value={category} />
-              ))}
-            </Picker>
-          </View>
-          {formErrors.category && (
-            <Text style={styles.errorText}>{formErrors.category}</Text>
-          )}
-        </View>
+        <Select
+          label="Category"
+          value={formData.category}
+          onValueChange={(value) => handleChange('category', value)}
+          options={categories.map((category) => ({ label: category, value: category }))}
+          error={!!formErrors.category}
+          helperText={formErrors.category}
+        />
 
         <Input
           label="Note Content"
@@ -146,35 +136,6 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     padding: scale(16),
-  },
-  pickerContainer: {
-    marginBottom: scale(16),
-  },
-  label: {
-    fontSize: scale(14),
-    fontWeight: '500',
-    color: '#333333',
-    marginBottom: scale(6),
-  },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: scale(8),
-    backgroundColor: '#F5F5F5',
-    overflow: 'hidden',
-  },
-  pickerError: {
-    borderColor: '#F44336',
-  },
-  picker: {
-    height: scale(44),
-    width: '100%',
-  },
-  errorText: {
-    fontSize: scale(12),
-    color: '#F44336',
-    marginTop: scale(4),
-    marginLeft: scale(2),
   },
   contentInput: {
     height: scale(200),
