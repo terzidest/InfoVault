@@ -5,7 +5,7 @@ import {
   deleteFromSecureStore,
   getAllItemsByType,
 } from '../services/secureStorage';
-import { generateSecureId } from '../utils/encryption';
+import { generateSecureId } from '../utils/crypto';
 import type { PersonalInfo, PersonalInfoInput } from '../types/models';
 
 interface PersonalInfoState {
