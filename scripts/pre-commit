@@ -1,0 +1,127 @@
+#!/bin/sh
+#
+# InfoVault pre-commit hook — structural backstop for the security invariants
+# in CLAUDE.md. CLAUDE.md rules are followed ~70% of the time; these checks
+# push the security-critical ones toward 100% by blocking the commit.
+#
+# Install: see scripts/install-hooks.sh  (or copy this to .git/hooks/pre-commit)
+#
+# Scope: only staged, added/changed lines in source files are checked, so it
+# won't punish pre-existing code you didn't touch.
+#
+# Bypass (use sparingly, and never for a real secret): git commit --no-verify
+
+set -eu
+
+RED=$(printf '\033[31m')
+YEL=$(printf '\033[33m')
+RST=$(printf '\033[0m')
+
+fail=0
+
+note() { printf "%s%s%s\n" "$RED" "$1" "$RST"; }
+warn() { printf "%s%s%s\n" "$YEL" "$1" "$RST"; }
+
+# Files we care about: app source. Skip the hook script itself, lockfiles,
+# markdown, and node_modules.
+staged_files=$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '\.(ts|tsx|js|jsx)$' \
+  | grep -vE '(node_modules/|\.test\.|\.spec\.|__tests__/|/install-hooks\.sh$)' || true)
+
+if [ -z "$staged_files" ]; then
+  exit 0
+fi
+
+# Helper: grep only the ADDED lines of the staged diff for a pattern.
+# $1 = file, $2 = ERE pattern. Prints matching added lines with line context.
+added_matches() {
+  _file=$1
+  _pat=$2
+  git diff --cached -U0 -- "$_file" \
+    | grep -E '^\+' \
+    | grep -vE '^\+\+\+' \
+    | sed 's/^\+//' \
+    | grep -nE "$_pat" || true
+}
+
+for f in $staged_files; do
+
+  # 1) console.log / warn / error / debug of anything that looks like a secret.
+  #    Matches a console call on a line that also mentions a sensitive token.
+  hits=$(added_matches "$f" \
+    'console\.(log|warn|error|info|debug)\(.*(password|passwd|secret|masterPassword|encryptionKey|derivedKey|privateKey|identifier|plaintext|decrypted|sealedData|mnemonic|seed)')
+  if [ -n "$hits" ]; then
+    note "BLOCKED: possible secret logged in $f"
+    echo "$hits" | sed 's/^/    /'
+    echo "    -> Remove the console.* call. Never log secrets, even temporarily."
+    fail=1
+  fi
+
+  # 2) Math.random() in app code (must use expo-crypto for anything security-relevant).
+  hits=$(added_matches "$f" 'Math\.random\s*\(')
+  if [ -n "$hits" ]; then
+    note "BLOCKED: Math.random() in $f"
+    echo "$hits" | sed 's/^/    /'
+    echo "    -> Use expo-crypto (Crypto.randomUUID / Crypto.getRandomBytesAsync)."
+    echo "       If this is provably non-security (e.g. UI jitter), justify and use --no-verify."
+    fail=1
+  fi
+
+  # 3) AsyncStorage used for anything key/secret-shaped. Keys belong in SecureStore.
+  hits=$(added_matches "$f" \
+    'AsyncStorage\.(set|get|setItem|getItem|multiSet).*(key|secret|password|token|encryptionKey)')
+  if [ -n "$hits" ]; then
+    note "BLOCKED: secret-shaped data in AsyncStorage in $f"
+    echo "$hits" | sed 's/^/    /'
+    echo "    -> AsyncStorage is NOT secure. Use expo-secure-store."
+    fail=1
+  fi
+
+  # 4) Writing the encryption key / master password straight to SecureStore as a
+  #    plain variable (the key may only be persisted behind a biometric gate).
+  #    This is a heuristic; review the match.
+  hits=$(added_matches "$f" \
+    'SecureStore\.setItemAsync\([^)]*(masterPassword|encryptionKey|derivedKey|rawKey)')
+  if [ -n "$hits" ]; then
+    warn "REVIEW: key/master-password written to SecureStore in $f"
+    echo "$hits" | sed 's/^/    /'
+    echo "    -> Allowed ONLY behind a biometric gate. If that's what this is, confirm and --no-verify."
+    echo "       Otherwise this violates the in-memory-only key rule."
+    fail=1
+  fi
+
+  # 5) Obvious hardcoded credential literals. Tightened to secret-LOOKING values
+  #    only: a quoted token of 12+ chars with NO spaces (real keys/tokens don't
+  #    contain spaces), assigned to a secret-named variable. This avoids firing
+  #    on human-readable label strings like "user password field".
+  hits=$(added_matches "$f" \
+    '(password|passwd|secret|apiKey|api_key|access_?token|privateKey)\s*[:=]\s*["'"'"'][^"'"'"' ]{12,}["'"'"']')
+  if [ -n "$hits" ]; then
+    warn "REVIEW: possible hardcoded secret in $f"
+    echo "$hits" | sed 's/^/    /'
+    echo "    -> If this is a real secret, remove it. If it's a placeholder/test value, --no-verify."
+    fail=1
+  fi
+
+done
+
+# 6) Crypto/security changes should keep SECURITY.md in sync. Soft nudge:
+#    if crypto.ts or the storage service changed but SECURITY.md didn't, warn (non-blocking).
+crypto_changed=$(echo "$staged_files" | grep -E '(utils/crypto\.ts|services/secureStorage\.ts|services/authentication\.ts)' || true)
+if [ -n "$crypto_changed" ]; then
+  sec_changed=$(git diff --cached --name-only --diff-filter=ACM | grep -E 'SECURITY\.md$' || true)
+  if [ -z "$sec_changed" ]; then
+    warn "NOTE: you changed a crypto/auth/storage file but not SECURITY.md."
+    warn "      If the security behavior changed, update SECURITY.md (and the README) too."
+    warn "      (This is a reminder, not a block.)"
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  note "Commit blocked by InfoVault security checks. Fix the issues above."
+  echo "To bypass for a genuine false positive: git commit --no-verify"
+  exit 1
+fi
+
+exit 0
