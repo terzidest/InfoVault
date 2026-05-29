@@ -1,6 +1,7 @@
 import type { StackScreenProps } from '@react-navigation/stack';
 
 export type RootStackParamList = {
+  SetupMasterPassword: undefined;
   Authentication: undefined;
   Home: undefined;
   CredentialsList: undefined;

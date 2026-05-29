@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 
 import Home from '../screens/Home';
 import Authentication from '../screens/auth/Authentication';
+import SetupMasterPassword from '../screens/auth/SetupMasterPassword';
 import CredentialsList from '../screens/credentials/CredentialsList';
 import AddCredential from '../screens/credentials/AddCredential';
 import ViewCredential from '../screens/credentials/ViewCredential';
@@ -16,15 +17,18 @@ import ViewNote from '../screens/notes/ViewNote';
 import Settings from '../screens/settings/Settings';
 
 import Header from '../components/layouts/Header';
+import useAuthStore from '../store/authStore';
 import type { RootStackParamList } from '../types/navigation';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
 const AppNavigator: React.FC = () => {
+  const needsSetup = useAuthStore((state) => state.needsSetup);
+
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Authentication"
+        initialRouteName={needsSetup ? 'SetupMasterPassword' : 'Authentication'}
         screenOptions={({ route }) => ({
           header: ({ navigation, options }) => {
             const isHomeOrAuth = route.name === 'Home' || route.name === 'Authentication';
@@ -43,6 +47,11 @@ const AppNavigator: React.FC = () => {
           animationEnabled: true,
         })}
       >
+        <Stack.Screen
+          name="SetupMasterPassword"
+          component={SetupMasterPassword}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen
           name="Authentication"
           component={Authentication}

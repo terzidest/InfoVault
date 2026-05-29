@@ -7,7 +7,6 @@ const useAuth = () => {
   const {
     isAuthenticated,
     isInitialized,
-    login,
     logout,
     init,
     updateLastActive,
@@ -41,7 +40,6 @@ const useAuth = () => {
   return {
     isAuthenticated,
     isInitialized,
-    login,
     logout,
     updateLastActive,
   };
