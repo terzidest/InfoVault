@@ -21,11 +21,11 @@ This is a credential manager. The following are hard rules, not preferences:
 
 - **NEVER persist the encryption key, master password, or any derived key in plaintext.** The key lives in memory only, inside `authStore`. It may be stored in SecureStore *only* behind a biometric gate, never in AsyncStorage, never in a Zustand-persisted slice, never logged.
 - **NEVER `console.log` secrets** — passwords, identifiers, keys, decrypted record contents, the master password. No exceptions, including "temporary" debugging.
-- **NEVER write sensitive data to storage unencrypted.** All records go through `encryptRecord` (whole-record AES-256-GCM) before `SecureStore.setItemAsync`. Reads go through `decryptRecord`.
+- **NEVER write sensitive data to storage unencrypted.** All records go through `encryptRecord` (whole-record AES-256-GCM, `@noble/ciphers`) before `SecureStore.setItemAsync`. Reads go through `decryptRecord`. (The salt and verifier are not secret and are stored directly by `authStore`, outside the encrypting service, so they're readable before unlock.)
 - **NEVER weaken the crypto** to make something easier — e.g. don't drop the GCM tag, reuse a nonce, skip the salt, or replace the key derivation with something faster without explicitly flagging it.
-- **NEVER use `Math.random()` for anything security-relevant.** Use `expo-crypto` (`Crypto.randomUUID()`, `Crypto.getRandomBytesAsync`).
+- **NEVER use `Math.random()` for anything security-relevant.** Use `expo-crypto` (`Crypto.randomUUID()`, `Crypto.getRandomBytesAsync`). Do NOT use `@noble`'s `randomBytes` — it relies on WebCrypto, which is absent in Hermes.
 - On `logout()` and on auto-lock timeout, the in-memory key MUST be cleared, forcing re-unlock.
-- The KDF is deliberately iterated SHA-256 (~5k rounds) for the demo; PBKDF2/Argon2 is the documented upgrade path. Don't silently swap it either direction — if changing, update `SECURITY.md` too.
+- The KDF is PBKDF2-SHA256 (100k iterations) via `@noble/hashes`; Argon2id is the documented upgrade path. Don't silently swap it either direction — if changing, update `SECURITY.md` too.
 
 If a requested change would conflict with any of the above, stop and flag it rather than implementing it.
 
