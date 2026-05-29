@@ -27,14 +27,14 @@ Stated plainly so there are no false assumptions:
 ## Cryptographic design
 
 ### Encryption
-- **Algorithm:** AES-256-GCM (authenticated encryption) via `expo-crypto`'s native implementation — CryptoKit on iOS, `javax.crypto` on Android, SubtleCrypto on web. NIST-recommended defaults (96-bit nonce, 128-bit authentication tag).
+- **Algorithm:** AES-256-GCM (authenticated encryption) via [`@noble/ciphers`](https://github.com/paulmillr/noble-ciphers) — an audited, dependency-free, pure-TypeScript implementation. NIST-recommended defaults (96-bit nonce, 128-bit authentication tag). A pure-JS library was chosen over `expo-crypto`'s native AES because that API requires Expo SDK 55+, while this app targets SDK 52; noble delivers the same algorithm with no native module and no multi-version SDK upgrade.
 - **Granularity:** whole-record encryption. The entire record is serialized and encrypted as one unit, so no field-level metadata (titles, dates, types) is left in plaintext. Search operates over records *after* they are decrypted into memory, so encryption does not impair it.
 - **Authentication:** the GCM tag detects tampering; a modified ciphertext fails to decrypt rather than returning corrupted data.
 
 ### Key derivation
-- **Current:** the AES key is derived from the master password and a per-install random salt using iterated SHA-256 (multiple thousand rounds). The salt defeats precomputed (rainbow-table) attacks; the iteration count adds work to each guess.
-- **Known limitation:** iterated SHA-256 is fast relative to a purpose-built password hashing function. This is a deliberate, documented scoping decision for this build.
-- **Upgrade path:** the derivation is isolated in `utils/crypto.ts` behind a single function. Replacing it with **PBKDF2** (high iteration count) or **Argon2id** (memory-hard, the current best practice) hardens the vault against offline brute-force without changing the rest of the system. This is the first change to make before treating InfoVault as production-grade.
+- **Current:** the AES-256 key is derived from the master password and a per-install random salt using **PBKDF2-SHA256 at 100,000 iterations** (via [`@noble/hashes`](https://github.com/paulmillr/noble-hashes)). The salt defeats precomputed (rainbow-table) attacks; the iteration count adds work to each guess.
+- **Known limitation:** PBKDF2 is not memory-hard, so it is more vulnerable to GPU/ASIC-accelerated offline cracking than a memory-hard function. The iteration count is also a latency/security tradeoff tuned for acceptable unlock time in pure JS.
+- **Upgrade path:** the derivation is isolated in `utils/crypto.ts` behind a single `deriveKey` function. Replacing it with **Argon2id** (memory-hard, current best practice — also available in `@noble/hashes`) hardens the vault against offline brute-force without changing the rest of the system.
 
 ### Key handling
 - The derived key exists **in memory only** during an unlocked session.
@@ -44,7 +44,7 @@ Stated plainly so there are no false assumptions:
 - On logout and on auto-lock, the in-memory key is cleared.
 
 ### Randomness
-All security-relevant randomness (salts, identifiers, nonces) comes from `expo-crypto`. `Math.random()` is never used for security purposes.
+All security-relevant randomness (salts, identifiers, GCM nonces) comes from `expo-crypto` (`getRandomBytesAsync` / `randomUUID`), a CSPRNG backed by the platform. `Math.random()` is never used for security purposes, and `@noble`'s own `randomBytes` is deliberately avoided because it relies on WebCrypto, which is absent in the React Native (Hermes) runtime.
 
 ## Storage
 
