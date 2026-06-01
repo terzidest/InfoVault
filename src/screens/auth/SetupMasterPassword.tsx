@@ -18,7 +18,7 @@ interface FormData {
 type FormErrors = Partial<Record<keyof FormData, string>>;
 
 const SetupMasterPassword: React.FC<ScreenProps<'SetupMasterPassword'>> = ({ navigation }) => {
-  const { setupMasterPassword, isLoading } = useAuthStore();
+  const { setupMasterPassword, enableBiometricUnlock, biometricAvailable, isLoading } = useAuthStore();
   const [formData, setFormData] = useState<FormData>({ password: '', confirm: '' });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
@@ -53,10 +53,28 @@ const SetupMasterPassword: React.FC<ScreenProps<'SetupMasterPassword'>> = ({ nav
     }
 
     const ok = await setupMasterPassword(formData.password);
-    if (ok) {
-      navigation.replace('Home');
-    } else {
+    if (!ok) {
       Alert.alert('Setup Failed', 'Could not set up your vault. Please try again.');
+      return;
+    }
+
+    if (biometricAvailable) {
+      Alert.alert(
+        'Enable Face ID / Touch ID?',
+        'You can unlock InfoVault with biometrics instead of typing your master password every time.',
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => navigation.replace('Home') },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              await enableBiometricUnlock();
+              navigation.replace('Home');
+            },
+          },
+        ]
+      );
+    } else {
+      navigation.replace('Home');
     }
   };
 

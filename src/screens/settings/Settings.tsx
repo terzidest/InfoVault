@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
 import useSettingsStore from '../../store/settingsStore';
+import useAuthStore from '../../store/authStore';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Select from '../../components/ui/Select';
@@ -19,6 +20,10 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
   const { settings, isPremium, initSettings, updateSettings, resetSettings, updatePremiumStatus } =
     useSettingsStore();
   const { isAuthenticated, updateLastActive, logout } = useAuth();
+  const biometricAvailable = useAuthStore((s) => s.biometricAvailable);
+  const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
+  const enableBiometricUnlock = useAuthStore((s) => s.enableBiometricUnlock);
+  const disableBiometricUnlock = useAuthStore((s) => s.disableBiometricUnlock);
 
   const timeoutOptions = [
     { label: '1 minute', value: 60000 },
@@ -130,14 +135,24 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
 
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Show Biometric Prompt</Text>
+            <Text style={styles.settingTitle}>Use biometric unlock</Text>
             <Text style={styles.settingDescription}>
-              Automatically prompt for biometric authentication on launch
+              {biometricAvailable
+                ? 'Unlock with Face ID or Touch ID instead of typing your master password'
+                : 'No biometric enrolled on this device'}
             </Text>
           </View>
           <Switch
-            value={settings.showBiometricPrompt}
-            onValueChange={() => handleToggleSetting('showBiometricPrompt')}
+            value={biometricEnabled}
+            onValueChange={async (next) => {
+              updateLastActive();
+              if (next) {
+                await enableBiometricUnlock();
+              } else {
+                await disableBiometricUnlock();
+              }
+            }}
+            disabled={!biometricAvailable}
             trackColor={{ false: '#CCCCCC', true: '#4CAF50' }}
             thumbColor="#FFFFFF"
           />

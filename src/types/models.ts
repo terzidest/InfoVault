@@ -49,7 +49,6 @@ export type ThemeMode = 'light' | 'dark';
 export interface Settings {
   theme: ThemeMode;
   autoLockTimeout: number;
-  showBiometricPrompt: boolean;
   maskSensitiveData: boolean;
 }
 
