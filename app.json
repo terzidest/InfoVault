@@ -41,7 +41,12 @@
           "faceIDPermission": "Allow InfoVault to use Face ID to secure access to your personal information."
         }
       ],
-      "expo-secure-store"
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Allow InfoVault to use Face ID to unlock your vault."
+        }
+      ]
     ]
   }
 }
