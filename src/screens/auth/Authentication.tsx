@@ -1,30 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text } from 'react-native';
 import LottieView from 'lottie-react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import useAuth from '../../hooks/useAuth';
 import useAuthStore from '../../store/authStore';
 import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
 import type { ScreenProps } from '../../types/navigation';
 
-interface AuthDetails {
-  text: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-}
-
 const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation }) => {
-  const { login, isAuthenticated } = useAuth();
-  const { authTypes } = useAuthStore();
-  const [loginAttempted, setLoginAttempted] = useState(false);
+  const {
+    unlockWithPassword,
+    unlockWithBiometrics,
+    isAuthenticated,
+    isLoading,
+    biometricEnabled,
+  } = useAuthStore();
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const biometricAttempted = useRef(false);
 
   useFocusEffect(
     React.useCallback(() => {
+      setPassword('');
       setError(null);
-      setLoginAttempted(false);
-    }, [])
+      // Auto-trigger biometric once per focus when enabled. Cancelling
+      // leaves the screen in place with the password input as fallback.
+      if (biometricEnabled && !biometricAttempted.current) {
+        biometricAttempted.current = true;
+        unlockWithBiometrics();
+      }
+      return () => {
+        biometricAttempted.current = false;
+      };
+    }, [biometricEnabled, unlockWithBiometrics])
   );
 
   useEffect(() => {
@@ -33,51 +42,18 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     }
   }, [isAuthenticated, navigation]);
 
-  const handleAuthenticate = async () => {
-    setLoginAttempted(true);
+  const handleUnlock = async () => {
     setError(null);
-
-    try {
-      const success = await login();
-
-      if (!success) {
-        setError('Authentication failed. Please try again.');
-      }
-    } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
-      console.error('Authentication error:', err);
+    const ok = await unlockWithPassword(password);
+    if (!ok) {
+      setError('Incorrect master password');
     }
   };
 
-  const getAuthDetails = (): AuthDetails => {
-    if (!authTypes) {
-      return {
-        text: 'Authenticate',
-        icon: 'lock-closed-outline',
-      };
-    }
-
-    if (authTypes.hasFaceId) {
-      return {
-        text: 'Face ID',
-        icon: 'scan-outline',
-      };
-    }
-
-    if (authTypes.hasFingerprintId) {
-      return {
-        text: 'Fingerprint',
-        icon: 'finger-print-outline',
-      };
-    }
-
-    return {
-      text: 'Authenticate',
-      icon: 'lock-closed-outline',
-    };
+  const handleBiometric = async () => {
+    setError(null);
+    await unlockWithBiometrics();
   };
-
-  const { text, icon } = getAuthDetails();
 
   return (
     <View className="flex-1 bg-light justify-between p-5 pt-0">
@@ -86,44 +62,51 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
       <View className="items-center">
         <Text className="text-xl font-bold text-primary mb-6">Welcome to InfoVault</Text>
         <View style={{ height: 160, width: 160, marginBottom: 24, justifyContent: 'center', alignItems: 'center' }}>
-          {!loginAttempted ? (
-            <LottieView
-              source={require('../../assets/animations/lock.json')}
-              autoPlay
-              loop
-              style={{ width: 160, height: 160 }}
-            />
-          ) : (
-            <View
-              style={{
-                width: 100,
-                height: 100,
-                borderRadius: 50,
-                backgroundColor: '#f8f9fa',
-                justifyContent: 'center',
-                alignItems: 'center',
-                borderWidth: 2,
-                borderColor: '#FFC107',
-              }}
-            >
-              <Ionicons name={icon} size={60} color="#006E90" />
-            </View>
-          )}
+          <LottieView
+            source={require('../../assets/animations/lock.json')}
+            autoPlay
+            loop
+            style={{ width: 160, height: 160 }}
+          />
         </View>
 
         <Text className="text-base text-dark mb-6 text-center">
-          Please authenticate to access your vault
+          {biometricEnabled
+            ? 'Unlock with biometrics, or enter your master password'
+            : 'Enter your master password to unlock your vault'}
         </Text>
 
-        {error && (
-          <Text className="text-danger text-sm mb-4 text-center">
-            {error}
-          </Text>
-        )}
-
-        <Button onPress={handleAuthenticate} size="large" className="w-full max-w-[280px]">
-          {text}
-        </Button>
+        <View className="w-full max-w-[320px]">
+          {biometricEnabled && (
+            <Button
+              onPress={handleBiometric}
+              size="large"
+              variant="outline"
+              isLoading={isLoading}
+              disabled={isLoading}
+              className="mb-3"
+            >
+              Use biometrics
+            </Button>
+          )}
+          <Input
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Master password"
+            secure
+            error={!!error}
+            helperText={error ?? undefined}
+            onSubmitEditing={handleUnlock}
+          />
+          <Button
+            onPress={handleUnlock}
+            size="large"
+            isLoading={isLoading}
+            disabled={isLoading || !password}
+          >
+            Unlock
+          </Button>
+        </View>
       </View>
     </View>
   );

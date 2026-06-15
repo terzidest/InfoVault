@@ -16,6 +16,10 @@ web-build/
 *.key
 *.mobileprovision
 
+# Prebuild output (regenerated from app.json on each build)
+/ios
+/android
+
 # Metro
 .metro-health-check*
 

@@ -6,7 +6,6 @@ import type { Settings } from '../types/models';
 const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
   autoLockTimeout: 300000,
-  showBiometricPrompt: true,
   maskSensitiveData: true,
 };
 
