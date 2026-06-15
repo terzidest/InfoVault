@@ -79,14 +79,14 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
     );
   };
 
-  const handleLogout = () => {
+  const handleLock = () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout? You will need to authenticate again to access your data.',
+      'Lock vault',
+      'Lock InfoVault now? You will need to unlock again to access your data.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Logout',
+          text: 'Lock',
           style: 'destructive',
           onPress: () => {
             logout();
@@ -216,8 +216,8 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
           Reset Settings
         </Button>
 
-        <Button variant="danger" style={styles.actionButton} onPress={handleLogout}>
-          Logout
+        <Button variant="danger" style={styles.actionButton} onPress={handleLock}>
+          Lock
         </Button>
       </View>
     </ScrollView>
