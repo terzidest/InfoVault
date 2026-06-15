@@ -18,7 +18,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSFaceIDUsageDescription": "This app will use Face ID to secure access to your personal information."
-      }
+      },
+      "bundleIdentifier": "com.anonymous.info-vault"
     },
     "android": {
       "adaptiveIcon": {
@@ -28,11 +29,12 @@
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
-      ]
+      ],
+      "package": "com.anonymous.infovault"
     },
     "web": {
       "favicon": "./assets/favicon.png",
-       "bundler": "metro"
+      "bundler": "metro"
     },
     "plugins": [
       [
@@ -46,7 +48,8 @@
         {
           "faceIDPermission": "Allow InfoVault to use Face ID to unlock your vault."
         }
-      ]
+      ],
+      "./plugins/with-fmt-xcode26-patch"
     ]
   }
 }
