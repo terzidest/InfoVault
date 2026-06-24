@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
 
@@ -9,6 +9,7 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
+import type { Note } from '../../types/models';
 
 interface FormData {
   title: string;
@@ -18,17 +19,26 @@ interface FormData {
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
 
-const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation }) => {
-  const { addNote, categories, isLoading } = useNotesStore();
+const toFormData = (existing: Note | undefined): FormData => ({
+  title: existing?.title ?? '',
+  content: existing?.content ?? '',
+  category: existing?.category ?? 'Personal',
+});
+
+const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation, route }) => {
+  const id = route.params?.id;
+  const isEditMode = Boolean(id);
+
+  const { addNote, updateNote, categories, isLoading } = useNotesStore();
+  const existing = useNotesStore((s) => (id ? s.getNoteById(id) : undefined));
   const { updateLastActive } = useAuth();
 
-  const [formData, setFormData] = useState<FormData>({
-    title: '',
-    content: '',
-    category: 'Personal',
-  });
-
+  const [formData, setFormData] = useState<FormData>(() => toFormData(existing));
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: isEditMode ? 'Edit Note' : 'Add Note' });
+  }, [isEditMode, navigation]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     updateLastActive();
@@ -63,7 +73,11 @@ const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation }) => {
     }
 
     try {
-      await addNote(formData);
+      if (id) {
+        await updateNote(id, formData);
+      } else {
+        await addNote(formData);
+      }
       navigation.goBack();
     } catch {
       Alert.alert(
@@ -121,7 +135,7 @@ const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation }) => {
             isLoading={isLoading}
             disabled={isLoading || !formData.title || !formData.content}
           >
-            Save Note
+            {isEditMode ? 'Save Changes' : 'Save Note'}
           </Button>
         </View>
       </View>

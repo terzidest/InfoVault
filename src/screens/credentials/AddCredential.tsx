@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import Input from '../../components/ui/Input';
 import { checkPasswordStrength } from '../../utils/crypto';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
-import type { CredentialInput } from '../../types/models';
+import type { Credential, CredentialInput } from '../../types/models';
 
 type FormData = Required<Pick<CredentialInput, 'title'>> & {
   username: string;
@@ -21,18 +21,31 @@ type FormData = Required<Pick<CredentialInput, 'title'>> & {
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
 
-const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation }) => {
-  const { addCredential, isLoading } = useCredentialsStore();
+const toFormData = (existing: Credential | undefined): FormData => ({
+  title: existing?.title ?? '',
+  username: existing?.username ?? '',
+  password: existing?.password ?? '',
+  website: existing?.website ?? '',
+  notes: existing?.notes ?? '',
+});
+
+const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, route }) => {
+  const id = route.params?.id;
+  const isEditMode = Boolean(id);
+
+  const { addCredential, updateCredential, isLoading } = useCredentialsStore();
+  const existing = useCredentialsStore((s) => (id ? s.getCredentialById(id) : undefined));
   const { updateLastActive } = useAuth();
-  const [formData, setFormData] = useState<FormData>({
-    title: '',
-    username: '',
-    password: '',
-    website: '',
-    notes: '',
-  });
+
+  const [formData, setFormData] = useState<FormData>(() => toFormData(existing));
   const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const [passwordStrength, setPasswordStrength] = useState(0);
+  const [passwordStrength, setPasswordStrength] = useState(() =>
+    checkPasswordStrength(existing?.password)
+  );
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: isEditMode ? 'Edit Credential' : 'Add Credential' });
+  }, [isEditMode, navigation]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     updateLastActive();
@@ -79,7 +92,11 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation }) =
     }
 
     try {
-      await addCredential(formData);
+      if (id) {
+        await updateCredential(id, formData);
+      } else {
+        await addCredential(formData);
+      }
       navigation.goBack();
     } catch {
       Alert.alert(
@@ -178,7 +195,7 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation }) =
             isLoading={isLoading}
             disabled={isLoading || !formData.title}
           >
-            Save Credential
+            {isEditMode ? 'Save Changes' : 'Save Credential'}
           </Button>
         </View>
       </View>

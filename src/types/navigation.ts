@@ -5,13 +5,13 @@ export type RootStackParamList = {
   Authentication: undefined;
   Home: undefined;
   CredentialsList: undefined;
-  AddCredential: undefined;
+  AddCredential: { id?: string } | undefined;
   ViewCredential: { id: string };
   PersonalInfoList: undefined;
-  AddPersonalInfo: undefined;
+  AddPersonalInfo: { id?: string } | undefined;
   ViewPersonalInfo: { id: string };
   NotesList: undefined;
-  AddNote: undefined;
+  AddNote: { id?: string } | undefined;
   ViewNote: { id: string };
   Settings: undefined;
 };
