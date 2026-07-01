@@ -1,4 +1,4 @@
-import type { StackScreenProps } from '@react-navigation/stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type RootStackParamList = {
   SetupMasterPassword: undefined;
@@ -16,7 +16,7 @@ export type RootStackParamList = {
   Settings: undefined;
 };
 
-export type ScreenProps<T extends keyof RootStackParamList> = StackScreenProps<RootStackParamList, T>;
+export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
 
 declare global {
   namespace ReactNavigation {
