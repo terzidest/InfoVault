@@ -106,11 +106,7 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
   };
 
   const handleEdit = () => {
-    Alert.alert(
-      'Coming Soon',
-      'Editing notes will be available in a future update.',
-      [{ text: 'OK' }]
-    );
+    navigation.navigate('AddNote', { id });
   };
 
   if (!note) {

@@ -99,11 +99,7 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
   };
 
   const handleEdit = () => {
-    Alert.alert(
-      'Coming Soon',
-      'Editing personal information will be available in a future update.',
-      [{ text: 'OK' }]
-    );
+    navigation.navigate('AddPersonalInfo', { id });
   };
 
   if (!info) {

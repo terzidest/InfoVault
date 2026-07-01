@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
 
@@ -9,6 +9,7 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
+import type { PersonalInfo } from '../../types/models';
 
 interface FormData {
   title: string;
@@ -22,8 +23,22 @@ interface FormData {
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
 
-const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation }) => {
-  const { addPersonalInfo, isLoading } = usePersonalInfoStore();
+const toFormData = (existing: PersonalInfo | undefined): FormData => ({
+  title: existing?.title ?? '',
+  type: existing?.type ?? '',
+  identifier: existing?.identifier ?? '',
+  issueDate: existing?.issueDate ?? '',
+  expiryDate: existing?.expiryDate ?? '',
+  issuingAuthority: existing?.issuingAuthority ?? '',
+  notes: existing?.notes ?? '',
+});
+
+const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation, route }) => {
+  const id = route.params?.id;
+  const isEditMode = Boolean(id);
+
+  const { addPersonalInfo, updatePersonalInfo, isLoading } = usePersonalInfoStore();
+  const existing = usePersonalInfoStore((s) => (id ? s.getPersonalInfoById(id) : undefined));
   const { updateLastActive } = useAuth();
 
   const infoTypes = [
@@ -36,17 +51,12 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation 
     { label: 'Other', value: 'Other' },
   ];
 
-  const [formData, setFormData] = useState<FormData>({
-    title: '',
-    type: '',
-    identifier: '',
-    issueDate: '',
-    expiryDate: '',
-    issuingAuthority: '',
-    notes: '',
-  });
-
+  const [formData, setFormData] = useState<FormData>(() => toFormData(existing));
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: isEditMode ? 'Edit Personal Info' : 'Add Personal Info' });
+  }, [isEditMode, navigation]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     updateLastActive();
@@ -101,7 +111,11 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation 
     }
 
     try {
-      await addPersonalInfo(formData);
+      if (id) {
+        await updatePersonalInfo(id, formData);
+      } else {
+        await addPersonalInfo(formData);
+      }
       navigation.goBack();
     } catch {
       Alert.alert(
@@ -196,7 +210,7 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation 
             isLoading={isLoading}
             disabled={isLoading || !formData.title}
           >
-            Save Information
+            {isEditMode ? 'Save Changes' : 'Save Information'}
           </Button>
         </View>
       </View>

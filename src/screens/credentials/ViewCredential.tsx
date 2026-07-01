@@ -86,11 +86,7 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
   };
 
   const handleEdit = () => {
-    Alert.alert(
-      'Coming Soon',
-      'Editing credentials will be available in a future update.',
-      [{ text: 'OK' }]
-    );
+    navigation.navigate('AddCredential', { id });
   };
 
   if (!credential) {
