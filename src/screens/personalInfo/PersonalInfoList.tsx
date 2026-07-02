@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,12 +7,25 @@ import { useFocusEffect } from '@react-navigation/native';
 import usePersonalInfoStore from '../../store/personalInfoStore';
 import useAuth from '../../hooks/useAuth';
 import PersonalInfoListItem from '../../components/features/personalInfo/PersonalInfoListItem';
+import SearchBar from '../../components/ui/SearchBar';
 import type { ScreenProps } from '../../types/navigation';
 import type { PersonalInfo } from '../../types/models';
 
 const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigation }) => {
   const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
   const { isAuthenticated, updateLastActive } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const q = searchQuery.trim().toLowerCase();
+
+  const filteredPersonalInfo = q
+    ? personalInfo.filter(
+        (info) =>
+          info.title?.toLowerCase().includes(q) ||
+          info.type?.toLowerCase().includes(q) ||
+          info.identifier?.toLowerCase().includes(q) ||
+          info.issuingAuthority?.toLowerCase().includes(q)
+      )
+    : personalInfo;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -37,20 +50,39 @@ const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigatio
     navigation.navigate('ViewPersonalInfo', { id: info.id });
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="card-outline" size={scale(60)} color="#CCCCCC" />
-      <Text style={styles.emptyTitle}>No Personal Information Yet</Text>
-      <Text style={styles.emptySubtitle}>
-        Add your personal information like ID numbers, passports, and more
-      </Text>
-    </View>
-  );
+  const renderEmptyState = () => {
+    if (personalInfo.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="card-outline" size={scale(60)} color="#CCCCCC" />
+          <Text style={styles.emptyTitle}>No Personal Information Yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Add your personal information like ID numbers, passports, and more
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="search-outline" size={scale(60)} color="#CCCCCC" />
+        <Text style={styles.emptyTitle}>No matches</Text>
+        <Text style={styles.emptySubtitle}>No items match your search.</Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
+      <View style={styles.searchContainer}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search personal info…"
+        />
+      </View>
+
       <FlatList
-        data={personalInfo}
+        data={filteredPersonalInfo}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <PersonalInfoListItem
@@ -60,6 +92,7 @@ const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigatio
         )}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
+        keyboardShouldPersistTaps="handled"
       />
 
       <TouchableOpacity style={styles.addButton} onPress={handleAddPersonalInfo}>
@@ -73,6 +106,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  searchContainer: {
+    paddingHorizontal: scale(16),
+    paddingTop: scale(12),
   },
   listContent: {
     padding: scale(16),
