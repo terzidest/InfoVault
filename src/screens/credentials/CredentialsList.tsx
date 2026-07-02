@@ -7,13 +7,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import useCredentialsStore from '../../store/credentialsStore';
 import useAuth from '../../hooks/useAuth';
 import CredentialListItem from '../../components/features/credentials/CredentialListItem';
+import SearchBar from '../../components/ui/SearchBar';
 import type { ScreenProps } from '../../types/navigation';
 import type { Credential } from '../../types/models';
 
 const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation }) => {
   const { credentials, loadCredentials } = useCredentialsStore();
   const { isAuthenticated, updateLastActive } = useAuth();
-  const [searchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const q = searchQuery.trim().toLowerCase();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -38,28 +40,46 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
     navigation.navigate('ViewCredential', { id: credential.id });
   };
 
-  const filteredCredentials =
-    searchQuery.length > 0
-      ? credentials.filter(
-          (cred) =>
-            cred.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            cred.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            cred.website?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : credentials;
+  const filteredCredentials = q
+    ? credentials.filter(
+        (cred) =>
+          cred.title?.toLowerCase().includes(q) ||
+          cred.username?.toLowerCase().includes(q) ||
+          cred.website?.toLowerCase().includes(q)
+      )
+    : credentials;
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="key-outline" size={scale(60)} color="#CCCCCC" />
-      <Text style={styles.emptyTitle}>No Credentials Yet</Text>
-      <Text style={styles.emptySubtitle}>
-        Add your first credential by tapping the plus button below
-      </Text>
-    </View>
-  );
+  const renderEmptyState = () => {
+    if (credentials.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="key-outline" size={scale(60)} color="#CCCCCC" />
+          <Text style={styles.emptyTitle}>No Credentials Yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Add your first credential by tapping the plus button below
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="search-outline" size={scale(60)} color="#CCCCCC" />
+        <Text style={styles.emptyTitle}>No matches</Text>
+        <Text style={styles.emptySubtitle}>No credentials match your search.</Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
+      <View style={styles.searchContainer}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search credentials…"
+        />
+      </View>
+
       <FlatList
         data={filteredCredentials}
         keyExtractor={(item) => item.id}
@@ -71,6 +91,7 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
         )}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
+        keyboardShouldPersistTaps="handled"
       />
 
       <TouchableOpacity style={styles.addButton} onPress={handleAddCredential}>
@@ -84,6 +105,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  searchContainer: {
+    paddingHorizontal: scale(16),
+    paddingTop: scale(12),
   },
   listContent: {
     padding: scale(16),

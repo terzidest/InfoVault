@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,12 +7,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import useNotesStore from '../../store/notesStore';
 import useAuth from '../../hooks/useAuth';
 import NoteListItem from '../../components/features/notes/NoteListItem';
+import SearchBar from '../../components/ui/SearchBar';
 import type { ScreenProps } from '../../types/navigation';
 import type { Note } from '../../types/models';
 
 const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
   const { notes, loadNotes } = useNotesStore();
   const { isAuthenticated, updateLastActive } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const q = searchQuery.trim().toLowerCase();
+
+  const filteredNotes = q
+    ? notes.filter(
+        (note) =>
+          note.title?.toLowerCase().includes(q) ||
+          note.content?.toLowerCase().includes(q) ||
+          note.category?.toLowerCase().includes(q)
+      )
+    : notes;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -37,26 +49,46 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
     navigation.navigate('ViewNote', { id: note.id });
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="document-text-outline" size={scale(60)} color="#CCCCCC" />
-      <Text style={styles.emptyTitle}>No Notes Yet</Text>
-      <Text style={styles.emptySubtitle}>
-        Add your first note by tapping the plus button below
-      </Text>
-    </View>
-  );
+  const renderEmptyState = () => {
+    if (notes.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="document-text-outline" size={scale(60)} color="#CCCCCC" />
+          <Text style={styles.emptyTitle}>No Notes Yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Add your first note by tapping the plus button below
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="search-outline" size={scale(60)} color="#CCCCCC" />
+        <Text style={styles.emptyTitle}>No matches</Text>
+        <Text style={styles.emptySubtitle}>No notes match your search.</Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
+      <View style={styles.searchContainer}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search notes…"
+        />
+      </View>
+
       <FlatList
-        data={notes}
+        data={filteredNotes}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <NoteListItem note={item} onPress={() => handleViewNote(item)} />
         )}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
+        keyboardShouldPersistTaps="handled"
       />
 
       <TouchableOpacity style={styles.addButton} onPress={handleAddNote}>
@@ -70,6 +102,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  searchContainer: {
+    paddingHorizontal: scale(16),
+    paddingTop: scale(12),
   },
   listContent: {
     padding: scale(16),
