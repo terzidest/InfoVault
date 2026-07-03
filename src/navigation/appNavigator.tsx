@@ -31,15 +31,14 @@ const AppNavigator: React.FC = () => {
         initialRouteName={needsSetup ? "SetupMasterPassword" : "Authentication"}
         screenOptions={({ route }) => ({
           header: ({ navigation, options }) => {
-            const isHomeOrAuth =
-              route.name === "Home" || route.name === "Authentication";
+            const isHome = route.name === "Home";
 
             return (
               <Header
                 title={options.title || route.name}
-                showBackButton={!isHomeOrAuth}
-                showLogo={isHomeOrAuth}
-                showSettings={route.name === "Home"}
+                showBackButton={!isHome}
+                showLogo={isHome}
+                showSettings={isHome}
                 onBackPress={() => navigation.goBack()}
               />
             );
@@ -56,10 +55,7 @@ const AppNavigator: React.FC = () => {
         <Stack.Screen
           name="Authentication"
           component={Authentication}
-          options={{
-            headerShown: true,
-            title: "",
-          }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Home"
