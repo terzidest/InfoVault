@@ -8,7 +8,6 @@ import {
   TextStyle,
   TouchableOpacityProps,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'outlineSecondary' | 'danger' | 'text';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -23,7 +22,6 @@ interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   className?: string;
-  icon?: React.ComponentProps<typeof Ionicons>['name'];
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -36,7 +34,6 @@ const Button: React.FC<ButtonProps> = ({
   style,
   textStyle,
   className,
-  icon: _icon,
   ...props
 }) => {
   const getButtonClasses = (): string => {
