@@ -8,6 +8,7 @@ import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { checkPasswordStrength } from '../../utils/crypto';
+import { generatePassword } from '../../utils/password';
 import { validateFields, ValidationRules } from '../../utils/validation';
 import type { ScreenProps } from '../../types/navigation';
 import type { Credential, CredentialInput } from '../../types/models';
@@ -71,6 +72,12 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, rou
     if (passwordStrength < 30) return '#F44336';
     if (passwordStrength < 60) return '#FFC107';
     return '#4CAF50';
+  };
+
+  const handleGenerate = async () => {
+    updateLastActive();
+    const generated = await generatePassword();
+    handleChange('password', generated);
   };
 
   const handleSave = async () => {
@@ -140,6 +147,15 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, rou
             helperText={formErrors.password}
           />
 
+          <TouchableOpacity
+            style={styles.generateButton}
+            onPress={handleGenerate}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh-outline" size={scale(16)} color="#006E90" />
+            <Text style={styles.generateText}>Generate strong password</Text>
+          </TouchableOpacity>
+
           {formData.password.length > 0 && (
             <View style={styles.strengthContainer}>
               <Text style={styles.strengthLabel}>Strength:</Text>
@@ -154,9 +170,6 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, rou
                   ]}
                 />
               </View>
-              <TouchableOpacity style={styles.generateButton}>
-                <Ionicons name="refresh-outline" size={scale(16)} color="#006E90" />
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -236,8 +249,18 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   generateButton: {
-    marginLeft: scale(8),
-    padding: scale(4),
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: scale(8),
+    marginLeft: scale(2),
+    paddingVertical: scale(4),
+  },
+  generateText: {
+    fontSize: scale(13),
+    color: '#006E90',
+    fontWeight: '500',
+    marginLeft: scale(6),
   },
   buttonsContainer: {
     flexDirection: 'row',
