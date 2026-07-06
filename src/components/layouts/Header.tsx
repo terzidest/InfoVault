@@ -34,8 +34,8 @@ const Header: React.FC<HeaderProps> = ({
 
   return (
     <View className="w-full bg-primary" style={{ paddingTop: insets.top }}>
-      {/* Logo header (Home) keeps the taller presence; title headers use the standard 56px toolbar. */}
-      <View className={`flex-row items-center justify-between px-4 ${showLogo ? 'h-20' : 'h-14'}`}>
+      {/* One height for every screen; 64px fits the logo at near-full presence. */}
+      <View className="flex-row items-center justify-between px-4 h-16">
         <View className="w-10 items-center">
           {showBackButton && (
             <TouchableOpacity
@@ -52,7 +52,7 @@ const Header: React.FC<HeaderProps> = ({
           {showLogo ? (
             <Image
               source={require('../../assets/images/logo.png')}
-              className="w-44 h-16"
+              className="w-40 h-14"
               resizeMode="contain"
             />
           ) : (
