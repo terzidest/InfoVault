@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obfuscateText } from '../../../utils/masking';
@@ -18,15 +18,15 @@ const PersonalInfoDetailItem: React.FC<PersonalInfoDetailItemProps> = ({
 }) => {
   const [isRevealed, setIsRevealed] = useState(false);
 
-  const toggleReveal = () => {
-    setIsRevealed((prev) => !prev);
+  const toggleReveal = () => setIsRevealed((prev) => !prev);
 
-    if (!isRevealed) {
-      setTimeout(() => {
-        setIsRevealed(false);
-      }, 10000);
-    }
-  };
+  // Auto-hide after 10s. Keyed on isRevealed with cleanup, so re-toggling
+  // restarts a single timer and unmounting never fires a stale one.
+  useEffect(() => {
+    if (!isRevealed) return;
+    const timer = setTimeout(() => setIsRevealed(false), 10000);
+    return () => clearTimeout(timer);
+  }, [isRevealed]);
 
   const displayValue = isSensitive && !isRevealed ? obfuscateText(value) : value;
 
