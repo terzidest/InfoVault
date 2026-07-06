@@ -9,6 +9,7 @@ InfoVault is a local-first manager for sensitive personal information: account c
 ## What InfoVault protects against
 
 - **Casual access to an unlocked device.** Sensitive fields are masked by default in the UI and require an explicit reveal, which auto-hides after a short timeout.
+- **Screenshots, screen recording, and app-switcher snapshots.** While the vault is unlocked, screen capture is blocked (`FLAG_SECURE` on Android; capture/recording protection on iOS), and an opaque overlay covers the UI whenever the app leaves the foreground so OS task-switcher snapshots never contain vault content. Capture by a compromised OS remains out of scope (below).
 - **Loss or theft of a device with the vault locked.** Records are stored as AES-256-GCM ciphertext. Without the key — which is derived from the user's master password and is not stored in plaintext — the stored data is opaque. An attacker with the raw storage contents sees ciphertext, salt, and a verifier, none of which reveal the data or the password.
 - **Reading raw storage.** Even with full read access to the app's `SecureStore` entries (e.g. via a backup or forensic dump on a non-hardened device), records cannot be decrypted without the master password.
 - **Idle exposure.** An auto-lock timeout locks the vault after inactivity — evaluated continuously while the app is foregrounded and again when it returns from the background — clearing the in-memory key and decrypted records and requiring re-authentication.
@@ -20,9 +21,9 @@ Stated plainly so there are no false assumptions:
 - **A compromised operating system or rooted/jailbroken device.** If the OS is compromised, the platform keystore guarantees no longer hold and an attacker may observe the app's memory or inputs.
 - **Malware running with the ability to read this app's process memory while the vault is unlocked.** Once unlocked, the encryption key is held in memory; anything that can read that memory can read the key. This is an inherent property of any app that decrypts data for display.
 - **A weak master password.** Encryption strength is bounded by the password's entropy. A guessable master password can be brute-forced; see the KDF note below for how much friction the derivation adds.
-- **Keyloggers or screen capture.** Capturing the master password as it is typed, or screenshotting revealed data, is outside the app's control.
+- **Keyloggers, or screen capture by a privileged/compromised OS.** In-app capture blocking stops ordinary screenshots and recordings, but capturing the master password as it is typed, or capture performed by the OS itself (or anything running with system privileges), is outside the app's control.
 - **Physical coercion** to unlock, and **shoulder-surfing** of revealed values.
-- **Clipboard exposure.** Copying a value to the clipboard hands it to the OS clipboard, which other apps may read. Copy is offered as a convenience; minimize its use for the most sensitive fields.
+- **Clipboard exposure.** Copying a value to the clipboard hands it to the OS clipboard, which other apps may read. The app clears its own copies after 30 seconds, but during that window (and on OSes with clipboard history/sync) exposure is possible. Copy is offered as a convenience; minimize its use for the most sensitive fields.
 
 ## Cryptographic design
 
