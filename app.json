@@ -50,7 +50,8 @@
         }
       ],
       "./plugins/with-fmt-xcode26-patch",
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ]
   }
 }
