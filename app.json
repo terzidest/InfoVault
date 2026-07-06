@@ -49,7 +49,8 @@
           "faceIDPermission": "Allow InfoVault to use Face ID to unlock your vault."
         }
       ],
-      "./plugins/with-fmt-xcode26-patch"
+      "./plugins/with-fmt-xcode26-patch",
+      "expo-asset"
     ]
   }
 }

@@ -19,6 +19,7 @@
     "@react-navigation/native-stack": "^6.11.0",
     "@types/react": "^18.2.79",
     "expo": "~52.0.46",
+    "expo-asset": "~11.0.5",
     "expo-clipboard": "~7.0.1",
     "expo-crypto": "~14.0.2",
     "expo-local-authentication": "~15.0.2",
