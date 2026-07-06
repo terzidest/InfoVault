@@ -35,9 +35,15 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
 
   useFocusEffect(
     React.useCallback(() => {
-      if (isAuthenticated) {
-        updateLastActive();
-        loadPersonalInfo().then(() => {
+      if (!isAuthenticated) return;
+
+      // The screen can lose focus (or unmount) before the load resolves;
+      // the cancelled flag stops late setState calls and spurious alerts.
+      let cancelled = false;
+      updateLastActive();
+      loadPersonalInfo()
+        .then(() => {
+          if (cancelled) return;
           const foundInfo = getPersonalInfoById(id);
           setInfo(foundInfo ?? null);
 
@@ -48,8 +54,18 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
               [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
           }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            Alert.alert('Error', 'Could not load the information.', [
+              { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+          }
         });
-      }
+
+      return () => {
+        cancelled = true;
+      };
     }, [isAuthenticated, id, updateLastActive, loadPersonalInfo, getPersonalInfoById, navigation])
   );
 

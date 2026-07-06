@@ -30,9 +30,15 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (isAuthenticated) {
-        updateLastActive();
-        loadNotes().then(() => {
+      if (!isAuthenticated) return;
+
+      // The screen can lose focus (or unmount) before the load resolves;
+      // the cancelled flag stops late setState calls and spurious alerts.
+      let cancelled = false;
+      updateLastActive();
+      loadNotes()
+        .then(() => {
+          if (cancelled) return;
           const foundNote = getNoteById(id);
           setNote(foundNote ?? null);
 
@@ -43,8 +49,18 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
               [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
           }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            Alert.alert('Error', 'Could not load the note.', [
+              { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+          }
         });
-      }
+
+      return () => {
+        cancelled = true;
+      };
     }, [isAuthenticated, id, updateLastActive, loadNotes, getNoteById, navigation])
   );
 

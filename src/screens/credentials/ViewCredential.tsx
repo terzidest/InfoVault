@@ -35,9 +35,15 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
 
   useFocusEffect(
     React.useCallback(() => {
-      if (isAuthenticated) {
-        updateLastActive();
-        loadCredentials().then(() => {
+      if (!isAuthenticated) return;
+
+      // The screen can lose focus (or unmount) before the load resolves;
+      // the cancelled flag stops late setState calls and spurious alerts.
+      let cancelled = false;
+      updateLastActive();
+      loadCredentials()
+        .then(() => {
+          if (cancelled) return;
           const foundCredential = getCredentialById(id);
           setCredential(foundCredential ?? null);
 
@@ -48,8 +54,18 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
               [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
           }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            Alert.alert('Error', 'Could not load the credential.', [
+              { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+          }
         });
-      }
+
+      return () => {
+        cancelled = true;
+      };
     }, [isAuthenticated, id, updateLastActive, loadCredentials, getCredentialById, navigation])
   );
 
