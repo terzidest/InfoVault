@@ -6,6 +6,7 @@ import {
   getAllItemsByType,
 } from '../services/secureStorage';
 import { generateSecureId } from '../utils/crypto';
+import { createOpTracker } from './opTracker';
 import type { Note, NoteInput, NoteCategory } from '../types/models';
 
 interface NotesState {
@@ -24,6 +25,8 @@ interface NotesState {
 
 const DEFAULT_CATEGORIES: NoteCategory[] = ['Personal', 'Work', 'Financial', 'Health', 'Other'];
 
+const ops = createOpTracker();
+
 const useNotesStore = create<NotesState>((set, get) => ({
   notes: [],
   categories: DEFAULT_CATEGORIES,
@@ -31,7 +34,7 @@ const useNotesStore = create<NotesState>((set, get) => ({
   error: null,
 
   loadNotes: async () => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const notes = await getAllItemsByType<Note>('note');
       // Custom categories have no storage of their own — each note carries
@@ -42,17 +45,19 @@ const useNotesStore = create<NotesState>((set, get) => ({
         ...DEFAULT_CATEGORIES,
         ...[...inUse].filter((c) => c && !DEFAULT_CATEGORIES.includes(c)),
       ];
-      set({ notes, categories, isLoading: false });
+      set({ notes, categories });
       return notes;
     } catch (error) {
       console.error('Error loading notes:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       return [];
+    } finally {
+      ops.end(set);
     }
   },
 
   addNote: async (note) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const id = generateSecureId();
       const now = new Date().toISOString();
@@ -68,18 +73,20 @@ const useNotesStore = create<NotesState>((set, get) => ({
       await saveToSecureStore(id, newNote, 'note');
 
       const notes = [...get().notes, newNote];
-      set({ notes, isLoading: false });
+      set({ notes });
 
       return newNote;
     } catch (error) {
       console.error('Error adding note:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
   updateNote: async (id, updatedData) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const existingNote = await getFromSecureStore<Note>(id);
 
@@ -99,29 +106,33 @@ const useNotesStore = create<NotesState>((set, get) => ({
         note.id === id ? { ...note, ...updatedNote } : note
       );
 
-      set({ notes, isLoading: false });
+      set({ notes });
 
       return updatedNote;
     } catch (error) {
       console.error('Error updating note:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
   deleteNote: async (id) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       await deleteFromSecureStore(id, 'note');
 
       const notes = get().notes.filter((note) => note.id !== id);
-      set({ notes, isLoading: false });
+      set({ notes });
 
       return true;
     } catch (error) {
       console.error('Error deleting note:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 

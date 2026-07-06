@@ -6,6 +6,7 @@ import {
   getAllItemsByType,
 } from '../services/secureStorage';
 import { generateSecureId } from '../utils/crypto';
+import { createOpTracker } from './opTracker';
 import type { PersonalInfo, PersonalInfoInput } from '../types/models';
 
 interface PersonalInfoState {
@@ -20,26 +21,30 @@ interface PersonalInfoState {
   clearPersonalInfo: () => void;
 }
 
+const ops = createOpTracker();
+
 const usePersonalInfoStore = create<PersonalInfoState>((set, get) => ({
   personalInfo: [],
   isLoading: false,
   error: null,
 
   loadPersonalInfo: async () => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const personalInfo = await getAllItemsByType<PersonalInfo>('personalInfo');
-      set({ personalInfo, isLoading: false });
+      set({ personalInfo });
       return personalInfo;
     } catch (error) {
       console.error('Error loading personal information:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       return [];
+    } finally {
+      ops.end(set);
     }
   },
 
   addPersonalInfo: async (info) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const id = generateSecureId();
       const now = new Date().toISOString();
@@ -54,18 +59,20 @@ const usePersonalInfoStore = create<PersonalInfoState>((set, get) => ({
       await saveToSecureStore(id, newInfo, 'personalInfo');
 
       const personalInfo = [...get().personalInfo, newInfo];
-      set({ personalInfo, isLoading: false });
+      set({ personalInfo });
 
       return newInfo;
     } catch (error) {
       console.error('Error adding personal information:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
   updatePersonalInfo: async (id, updatedData) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const existingInfo = await getFromSecureStore<PersonalInfo>(id);
 
@@ -85,29 +92,33 @@ const usePersonalInfoStore = create<PersonalInfoState>((set, get) => ({
         info.id === id ? { ...info, ...updatedInfo } : info
       );
 
-      set({ personalInfo, isLoading: false });
+      set({ personalInfo });
 
       return updatedInfo;
     } catch (error) {
       console.error('Error updating personal information:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
   deletePersonalInfo: async (id) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       await deleteFromSecureStore(id, 'personalInfo');
 
       const personalInfo = get().personalInfo.filter((info) => info.id !== id);
-      set({ personalInfo, isLoading: false });
+      set({ personalInfo });
 
       return true;
     } catch (error) {
       console.error('Error deleting personal information:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 

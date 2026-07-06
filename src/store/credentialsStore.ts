@@ -6,6 +6,7 @@ import {
   getAllItemsByType,
 } from '../services/secureStorage';
 import { generateSecureId } from '../utils/crypto';
+import { createOpTracker } from './opTracker';
 import type { Credential, CredentialInput } from '../types/models';
 
 interface CredentialsState {
@@ -20,26 +21,30 @@ interface CredentialsState {
   clearCredentials: () => void;
 }
 
+const ops = createOpTracker();
+
 const useCredentialsStore = create<CredentialsState>((set, get) => ({
   credentials: [],
   isLoading: false,
   error: null,
 
   loadCredentials: async () => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const credentials = await getAllItemsByType<Credential>('credential');
-      set({ credentials, isLoading: false });
+      set({ credentials });
       return credentials;
     } catch (error) {
       console.error('Error loading credentials:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       return [];
+    } finally {
+      ops.end(set);
     }
   },
 
   addCredential: async (credential) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const id = generateSecureId();
       const now = new Date().toISOString();
@@ -54,18 +59,20 @@ const useCredentialsStore = create<CredentialsState>((set, get) => ({
       await saveToSecureStore(id, newCredential, 'credential');
 
       const credentials = [...get().credentials, newCredential];
-      set({ credentials, isLoading: false });
+      set({ credentials });
 
       return newCredential;
     } catch (error) {
       console.error('Error adding credential:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
   updateCredential: async (id, updatedData) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       const existingCredential = await getFromSecureStore<Credential>(id);
 
@@ -85,29 +92,33 @@ const useCredentialsStore = create<CredentialsState>((set, get) => ({
         cred.id === id ? { ...cred, ...updatedCredential } : cred
       );
 
-      set({ credentials, isLoading: false });
+      set({ credentials });
 
       return updatedCredential;
     } catch (error) {
       console.error('Error updating credential:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
   deleteCredential: async (id) => {
-    set({ isLoading: true, error: null });
+    ops.begin(set);
     try {
       await deleteFromSecureStore(id, 'credential');
 
       const credentials = get().credentials.filter((cred) => cred.id !== id);
-      set({ credentials, isLoading: false });
+      set({ credentials });
 
       return true;
     } catch (error) {
       console.error('Error deleting credential:', error);
-      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      set({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    } finally {
+      ops.end(set);
     }
   },
 
