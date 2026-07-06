@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { AppState, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Text, View } from 'react-native';
+import * as ScreenCapture from 'expo-screen-capture';
+import { Ionicons } from '@expo/vector-icons';
 import useAuthStore from '../../store/authStore';
 import useSettingsStore from '../../store/settingsStore';
 
@@ -20,6 +22,21 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const lastTouchRef = useRef(0);
   const appStateRef = useRef(AppState.currentState);
+  // Obscures the UI in the OS app switcher so snapshots never show vault
+  // content. Starts obscured if mounted while not active (cold-start edge).
+  const [isObscured, setIsObscured] = useState(AppState.currentState !== 'active');
+
+  // Block screenshots and screen recording while the vault is unlocked
+  // (FLAG_SECURE on Android; recording/mirroring protection on iOS).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    ScreenCapture.preventScreenCaptureAsync().catch(() => {
+      // Best-effort: never break the app over capture protection.
+    });
+    return () => {
+      ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+    };
+  }, [isAuthenticated]);
 
   const handleTouchCapture = useCallback((): boolean => {
     const now = Date.now();
@@ -47,6 +64,7 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       const prevAppState = appStateRef.current;
       appStateRef.current = nextAppState;
+      setIsObscured(nextAppState !== 'active');
 
       const auth = useAuthStore.getState();
       if (!auth.isAuthenticated) return;
@@ -69,6 +87,12 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
   return (
     <View className="flex-1" onStartShouldSetResponderCapture={handleTouchCapture}>
       {children}
+      {isObscured && (
+        <View className="absolute inset-0 items-center justify-center bg-primary">
+          <Ionicons name="lock-closed" size={48} color="#FFFFFF" />
+          <Text className="text-lg font-semibold text-white mt-4">InfoVault</Text>
+        </View>
+      )}
     </View>
   );
 };
