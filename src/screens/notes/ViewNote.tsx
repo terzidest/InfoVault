@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -64,18 +64,6 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
         return '#F44336';
       default:
         return '#9C27B0';
-    }
-  };
-
-  const handleShare = async () => {
-    if (!note) return;
-
-    try {
-      await Share.share({
-        message: `${note.title}\n\n${note.content}\n\nShared from InfoVault`,
-      });
-    } catch {
-      Alert.alert('Error', 'Failed to share note');
     }
   };
 
@@ -147,10 +135,6 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
       <View style={styles.actionsContainer}>
         <Button variant="outline" style={styles.actionButton} onPress={handleEdit}>
           Edit
-        </Button>
-
-        <Button variant="outline" style={styles.actionButton} onPress={handleShare}>
-          Share
         </Button>
 
         <Button
