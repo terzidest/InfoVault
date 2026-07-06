@@ -4,6 +4,9 @@ import { bytesToHex, hexToBytes } from '@noble/ciphers/utils';
 import { generateSalt, deriveKey, makeVerifier, verifyKey } from '../utils/crypto';
 import { wipeAllRecords } from '../services/secureStorage';
 import { checkAuthenticationTypes } from '../services/authentication';
+import useCredentialsStore from './credentialsStore';
+import useNotesStore from './notesStore';
+import usePersonalInfoStore from './personalInfoStore';
 
 const SETUP_KEY = 'setupComplete';
 const SALT_KEY = 'vaultSalt';
@@ -203,7 +206,13 @@ const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    // Locking must drop every trace of the unlocked session: zero the key
+    // bytes and evict all decrypted records from the domain stores.
+    get().encryptionKey?.fill(0);
     set({ isAuthenticated: false, encryptionKey: null });
+    useCredentialsStore.getState().clearCredentials();
+    useNotesStore.getState().clearNotes();
+    usePersonalInfoStore.getState().clearPersonalInfo();
   },
 
   updateLastActive: () => {

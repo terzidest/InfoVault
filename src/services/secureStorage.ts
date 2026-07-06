@@ -19,7 +19,14 @@ export const saveToSecureStore = async (
   type: StorageType
 ): Promise<boolean> => {
   try {
-    const sealed = await encryptRecord(value, requireKey());
+    const sessionKey = requireKey();
+    const sealed = await encryptRecord(value, sessionKey);
+    // logout() zeroes the key bytes in place; if the vault locked while we
+    // were sealing, this record was encrypted with a dead key — abort rather
+    // than persist an undecryptable record.
+    if (useAuthStore.getState().encryptionKey !== sessionKey) {
+      throw new Error('Vault is locked');
+    }
     await SecureStore.setItemAsync(key, sealed);
 
     const keys = (await SecureStore.getItemAsync(type + 'Keys')) || '[]';
