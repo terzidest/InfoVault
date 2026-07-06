@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
 import usePersonalInfoStore from '../../store/personalInfoStore';
+import { copySensitive, CLIPBOARD_CLEAR_SECONDS } from '../../services/clipboard';
 import useSettingsStore from '../../store/settingsStore';
 import useAuth from '../../hooks/useAuth';
 import PersonalInfoDetailItem from '../../components/features/personalInfo/PersonalInfoDetailItem';
@@ -68,8 +68,11 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
 
   const handleCopy = async (value: string | undefined, label: string) => {
     if (!value) return;
-    await Clipboard.setStringAsync(value);
-    Alert.alert('Copied', `${label} copied to clipboard.`);
+    await copySensitive(value);
+    Alert.alert(
+      'Copied',
+      `${label} copied. The clipboard clears in ${CLIPBOARD_CLEAR_SECONDS} seconds.`
+    );
   };
 
   const handleDelete = () => {
