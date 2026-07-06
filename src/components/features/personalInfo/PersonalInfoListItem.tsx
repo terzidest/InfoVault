@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import useSettingsStore from '../../../store/settingsStore';
 import { formatRelativeTime } from '../../../utils/formatters';
+import { obfuscateText } from '../../../utils/masking';
 import type { PersonalInfo } from '../../../types/models';
 
 interface PersonalInfoListItemProps {
@@ -10,6 +12,17 @@ interface PersonalInfoListItemProps {
 }
 
 const PersonalInfoListItem: React.FC<PersonalInfoListItemProps> = ({ personalInfo, onPress }) => {
+  const maskSensitiveData = useSettingsStore((s) => s.settings.maskSensitiveData);
+
+  // The identifier is a sensitive field (passport/ID/tax numbers): the list
+  // shows a partially-masked form; the full value lives behind the detail
+  // view's reveal control.
+  const subtitle = personalInfo.identifier
+    ? maskSensitiveData
+      ? obfuscateText(personalInfo.identifier, true)
+      : personalInfo.identifier
+    : 'No details';
+
   const getIconName = (): React.ComponentProps<typeof Ionicons>['name'] => {
     const type = personalInfo.type?.toLowerCase() || '';
 
@@ -40,7 +53,7 @@ const PersonalInfoListItem: React.FC<PersonalInfoListItemProps> = ({ personalInf
         </Text>
 
         <Text className="text-sm text-gray-600 mb-1" numberOfLines={1}>
-          {personalInfo.identifier || personalInfo.description || 'No details'}
+          {subtitle}
         </Text>
 
         <Text className="text-xs text-gray-400">
