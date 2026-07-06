@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
 import useSettingsStore from '../../store/settingsStore';
@@ -17,8 +16,7 @@ type ToggleableSettingKey = {
 }[keyof SettingsType];
 
 const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
-  const { settings, isPremium, initSettings, updateSettings, resetSettings, updatePremiumStatus } =
-    useSettingsStore();
+  const { settings, initSettings, updateSettings, resetSettings } = useSettingsStore();
   const { isAuthenticated, updateLastActive, logout } = useAuth();
   const biometricAvailable = useAuthStore((s) => s.biometricAvailable);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
@@ -40,7 +38,6 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
     }
 
     initSettings();
-    updatePremiumStatus();
   }, [isAuthenticated, navigation]);
 
   useFocusEffect(
@@ -91,22 +88,6 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
           onPress: () => {
             logout();
             navigation.replace('Authentication');
-          },
-        },
-      ]
-    );
-  };
-
-  const handlePremiumInfo = () => {
-    Alert.alert(
-      'Premium Features',
-      'Upgrade to InfoVault Premium to access cloud backup, multi-device sync, custom categories, and more!',
-      [
-        { text: 'Maybe Later', style: 'cancel' },
-        {
-          text: 'Learn More',
-          onPress: () => {
-            Alert.alert('Coming Soon', 'Premium features will be available in a future update.');
           },
         },
       ]
@@ -176,28 +157,6 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Premium</Text>
-
-        <TouchableOpacity style={styles.premiumBanner} onPress={handlePremiumInfo}>
-          <View style={styles.premiumInfo}>
-            <Text style={styles.premiumTitle}>
-              {isPremium ? 'InfoVault Premium' : 'Upgrade to Premium'}
-            </Text>
-            <Text style={styles.premiumDescription}>
-              {isPremium
-                ? 'You have access to all premium features'
-                : 'Get cloud backup, sync, and more premium features'}
-            </Text>
-          </View>
-          <Ionicons
-            name={isPremium ? 'checkmark-circle' : 'arrow-forward-circle'}
-            size={scale(24)}
-            color={isPremium ? '#4CAF50' : '#006E90'}
-          />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
 
         <View style={styles.aboutItem}>
@@ -216,7 +175,7 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
           Reset Settings
         </Button>
 
-        <Button variant="danger" style={styles.actionButton} onPress={handleLock}>
+        <Button style={styles.actionButton} onPress={handleLock}>
           Lock
         </Button>
       </View>
@@ -266,29 +225,6 @@ const styles = StyleSheet.create({
   },
   pickerSpacing: {
     marginTop: scale(8),
-  },
-  premiumBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F5F5F5',
-    borderRadius: scale(8),
-    padding: scale(16),
-    marginVertical: scale(8),
-  },
-  premiumInfo: {
-    flex: 1,
-    paddingRight: scale(12),
-  },
-  premiumTitle: {
-    fontSize: scale(16),
-    fontWeight: '600',
-    color: '#006E90',
-    marginBottom: scale(4),
-  },
-  premiumDescription: {
-    fontSize: scale(13),
-    color: '#666666',
   },
   aboutItem: {
     flexDirection: 'row',

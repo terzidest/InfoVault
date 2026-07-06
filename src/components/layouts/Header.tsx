@@ -34,7 +34,8 @@ const Header: React.FC<HeaderProps> = ({
 
   return (
     <View className="w-full bg-primary" style={{ paddingTop: insets.top }}>
-      <View className="flex-row items-center justify-between px-4 py-2 h-20">
+      {/* One height for every screen; 64px fits the logo at near-full presence. */}
+      <View className="flex-row items-center justify-between px-4 h-16">
         <View className="w-10 items-center">
           {showBackButton && (
             <TouchableOpacity
@@ -49,15 +50,13 @@ const Header: React.FC<HeaderProps> = ({
 
         <View className="flex-1 items-center justify-center">
           {showLogo ? (
-            <View className="mt-0">
-              <Image
-                source={require('../../assets/images/logo.png')}
-                className="w-25 h-20"
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={require('../../assets/images/logo.png')}
+              className="w-40 h-14"
+              resizeMode="contain"
+            />
           ) : (
-            <Text className="text-2xl font-semibold text-secondary" numberOfLines={1}>
+            <Text className="text-lg font-semibold text-secondary" numberOfLines={1}>
               {title || 'InfoVault'}
             </Text>
           )}

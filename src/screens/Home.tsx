@@ -10,17 +10,34 @@ import useNotesStore from '../store/notesStore';
 import useSettingsStore from '../store/settingsStore';
 
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
 import type { ScreenProps } from '../types/navigation';
 
 interface CategoryCardProps {
   title: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
-  count: number;
   onPress: () => void;
   color: string;
   description?: string;
 }
+
+// Rotated daily by day-of-year; keeps "tip of the day" honest without a backend.
+const SECURITY_TIPS = [
+  'Use a strong, unique password for every account — the generator can make one for you.',
+  'Enable biometric unlock in Settings for fast access without weakening your master password.',
+  'Never share your master password. InfoVault cannot recover it if you forget it.',
+  'Review your stored credentials occasionally and delete accounts you no longer use.',
+  'A longer password beats a complex short one — aim for 16 characters or more.',
+  'Turn on auto-lock with a short timeout if you often leave your phone unattended.',
+  'Avoid reusing your master password anywhere else — it protects everything in this vault.',
+  'Update passwords for critical accounts (email, banking) at least once a year.',
+] as const;
+
+const getDailyTip = (): string => {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86_400_000);
+  return SECURITY_TIPS[dayOfYear % SECURITY_TIPS.length] ?? SECURITY_TIPS[0];
+};
 
 const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const { isAuthenticated, updateLastActive } = useAuth();
@@ -50,9 +67,8 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const navigateToCredentials = () => navigation.navigate('CredentialsList');
   const navigateToPersonalInfo = () => navigation.navigate('PersonalInfoList');
   const navigateToNotes = () => navigation.navigate('NotesList');
-  const navigateToSettings = () => navigation.navigate('Settings');
 
-  const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, count, onPress, color, description }) => (
+  const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, onPress, color, description }) => (
     <TouchableOpacity
       className="bg-white rounded-lg p-4 mb-3 shadow-sm border-l-4"
       style={{ borderLeftColor: color }}
@@ -68,7 +84,6 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
         <View className="flex-1">
           <Text className="text-base font-medium text-dark">{title}</Text>
           {description && <Text className="text-xs text-gray-500 mt-0.5">{description}</Text>}
-          <Text className="text-xs text-gray-500 mt-1.5">{count} items</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color="#999999" />
       </View>
@@ -85,7 +100,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
           </View>
           <View className="flex-1 items-center border-r border-gray-100">
             <Text className="text-2xl font-bold text-secondary mb-1">{personalInfo.length}</Text>
-            <Text className="text-xs text-gray-600">Personal Info</Text>
+            <Text className="text-xs text-gray-600">IDs & Docs</Text>
           </View>
           <View className="flex-1 items-center">
             <Text className="text-2xl font-bold text-success mb-1">{notes.length}</Text>
@@ -104,16 +119,14 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
           title="Credentials"
           description="Store website logins and passwords"
           icon="key-outline"
-          count={credentials.length}
           onPress={navigateToCredentials}
           color="#006E90"
         />
 
         <CategoryCard
-          title="Personal Information"
-          description="Keep IDs, passports and documents"
+          title="IDs & Documents"
+          description="Passports, licenses and ID numbers"
           icon="card-outline"
-          count={personalInfo.length}
           onPress={navigateToPersonalInfo}
           color="#FFC107"
         />
@@ -122,40 +135,19 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
           title="Notes"
           description="Secure private notes and ideas"
           icon="document-text-outline"
-          count={notes.length}
           onPress={navigateToNotes}
           color="#4CAF50"
         />
       </View>
 
       <Card
-        className="mx-4 mt-4 mb-6"
+        className="mx-4 mt-4 mb-8"
         variant="accent"
         icon="bulb-outline"
         title="Tip of the day"
       >
-        <Text className="text-sm text-gray-600">
-          Use strong, unique passwords for each of your accounts to enhance security.
-        </Text>
+        <Text className="text-sm text-gray-600">{getDailyTip()}</Text>
       </Card>
-
-      <View className="mx-4 mb-8 flex-row">
-        <Button
-          variant="outlineSecondary"
-          className="flex-1 mr-2"
-          icon="add-outline"
-          onPress={() => navigation.navigate('AddCredential')}
-        >
-          Add New
-        </Button>
-        <Button
-          variant="secondary"
-          className="flex-1 ml-2"
-          onPress={navigateToSettings}
-        >
-          Settings
-        </Button>
-      </View>
     </ScrollView>
   );
 };
