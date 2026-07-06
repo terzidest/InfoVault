@@ -22,9 +22,11 @@ interface NotesState {
   clearNotes: () => void;
 }
 
+const DEFAULT_CATEGORIES: NoteCategory[] = ['Personal', 'Work', 'Financial', 'Health', 'Other'];
+
 const useNotesStore = create<NotesState>((set, get) => ({
   notes: [],
-  categories: ['Personal', 'Work', 'Financial', 'Health', 'Other'],
+  categories: DEFAULT_CATEGORIES,
   isLoading: false,
   error: null,
 
@@ -32,7 +34,15 @@ const useNotesStore = create<NotesState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const notes = await getAllItemsByType<Note>('note');
-      set({ notes, isLoading: false });
+      // Custom categories have no storage of their own — each note carries
+      // its category, so rebuild the list from defaults plus what's in use.
+      // A custom category with no saved note is intentionally ephemeral.
+      const inUse = new Set(notes.map((note) => note.category));
+      const categories = [
+        ...DEFAULT_CATEGORIES,
+        ...[...inUse].filter((c) => c && !DEFAULT_CATEGORIES.includes(c)),
+      ];
+      set({ notes, categories, isLoading: false });
       return notes;
     } catch (error) {
       console.error('Error loading notes:', error);
@@ -129,7 +139,7 @@ const useNotesStore = create<NotesState>((set, get) => ({
   },
 
   clearNotes: () => {
-    set({ notes: [], error: null });
+    set({ notes: [], categories: DEFAULT_CATEGORIES, error: null });
   },
 }));
 
