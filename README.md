@@ -25,6 +25,8 @@ InfoVault is a secure personal information management application built with Rea
 - Biometric authentication integration
 - Masking of sensitive data
 - Auto-timeout for inactive sessions
+- Screenshot/recording blocking while unlocked, and an app-switcher privacy overlay
+- Clipboard auto-clear 30 seconds after copying a value
 
 
 ## Getting Started

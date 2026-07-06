@@ -13,7 +13,9 @@ npm run ios        # expo start --ios
 npm run typecheck  # tsc --noEmit  — RUN THIS before considering any change done
 ```
 
-There is no test suite yet. Verify changes by running the app and exercising the affected flow. Always run `npm run typecheck` after editing — this is a strict-TS codebase and type errors are the primary regression signal.
+There is no test suite yet. Verify changes by running the app and exercising the affected flow. Always run `npm run typecheck` after editing — this is a strict-TS codebase and type errors are the primary regression signal. Lint with `npm run lint`; CI enforces zero warnings.
+
+> **Lockfile gotcha:** after adding/removing any dependency, regenerate the lockfile from scratch (`rm -rf node_modules package-lock.json && npm install`). Incremental installs on macOS prune Linux-only optional entries (`@emnapi/*` under the unrs-resolver bindings) and `npm ci` then fails in CI.
 
 ## Security invariants (NEVER violate these)
 
