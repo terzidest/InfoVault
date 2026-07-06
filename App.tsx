@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import './global.css';
 
 import AppNavigator from './src/navigation/appNavigator';
+import AutoLockGate from './src/components/features/AutoLockGate';
 import useAuthStore from './src/store/authStore';
 
 const App: React.FC = () => {
@@ -36,7 +37,9 @@ const App: React.FC = () => {
         barStyle="light-content"
         translucent={true}
       />
-      <AppNavigator />
+      <AutoLockGate>
+        <AppNavigator />
+      </AutoLockGate>
     </SafeAreaProvider>
   );
 };

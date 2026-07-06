@@ -11,7 +11,7 @@ InfoVault is a local-first manager for sensitive personal information: account c
 - **Casual access to an unlocked device.** Sensitive fields are masked by default in the UI and require an explicit reveal, which auto-hides after a short timeout.
 - **Loss or theft of a device with the vault locked.** Records are stored as AES-256-GCM ciphertext. Without the key — which is derived from the user's master password and is not stored in plaintext — the stored data is opaque. An attacker with the raw storage contents sees ciphertext, salt, and a verifier, none of which reveal the data or the password.
 - **Reading raw storage.** Even with full read access to the app's `SecureStore` entries (e.g. via a backup or forensic dump on a non-hardened device), records cannot be decrypted without the master password.
-- **Idle exposure.** An auto-lock timeout clears the in-memory key after inactivity, returning the app to a locked state that requires re-authentication.
+- **Idle exposure.** An auto-lock timeout locks the vault after inactivity — evaluated continuously while the app is foregrounded and again when it returns from the background — clearing the in-memory key and decrypted records and requiring re-authentication.
 
 ## What InfoVault does NOT protect against
 
@@ -41,7 +41,7 @@ Stated plainly so there are no false assumptions:
 - It is **never** written to storage in plaintext, never logged, never placed in AsyncStorage or any persisted state slice.
 - For biometric convenience unlock, a copy of the key may be stored in the platform keystore (`SecureStore`) gated behind the OS biometric prompt — so it is released only on a successful biometric check.
 - The master password itself is never stored. Correctness is checked against a **verifier** (a known sentinel value encrypted under the derived key); decrypting the sentinel confirms the password without storing it or a recoverable hash of it.
-- On logout and on auto-lock, the in-memory key is cleared.
+- On logout and on auto-lock, the in-memory key bytes are zeroed and the reference dropped, and all decrypted records are evicted from in-memory state — locking leaves no plaintext behind.
 
 ### Randomness
 All security-relevant randomness (salts, identifiers, GCM nonces) comes from `expo-crypto` (`getRandomBytesAsync` / `randomUUID`), a CSPRNG backed by the platform. `Math.random()` is never used for security purposes, and `@noble`'s own `randomBytes` is deliberately avoided because it relies on WebCrypto, which is absent in the React Native (Hermes) runtime.
