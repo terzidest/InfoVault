@@ -16,6 +16,7 @@ npm run typecheck  # tsc --noEmit  — RUN THIS before considering any change do
 There is no test suite yet. Verify changes by running the app and exercising the affected flow. Always run `npm run typecheck` after editing — this is a strict-TS codebase and type errors are the primary regression signal. Lint with `npm run lint`; CI enforces zero warnings.
 
 > **Lockfile gotcha:** after adding/removing any dependency, regenerate the lockfile from scratch (`rm -rf node_modules package-lock.json && npm install`). Incremental installs on macOS prune Linux-only optional entries (`@emnapi/*` under the unrs-resolver bindings) and `npm ci` then fails in CI.
+> After regenerating, run `npx expo install --check` — a fresh resolve floats caret ranges past what SDK 52 supports (this broke Metro once via nativewind 4.2/css-interop). nativewind is pinned exact for this reason; don't re-add a caret. Verify bundling with `npx expo export --platform ios` before pushing dependency changes.
 
 ## Security invariants (NEVER violate these)
 
