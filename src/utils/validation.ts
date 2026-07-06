@@ -76,7 +76,7 @@ export const validateFields = <TData extends object>(
 ): ValidationResult<TData> => {
   const errors: Partial<Record<keyof TData, string>> = {};
 
-  (Object.keys(rules) as Array<keyof TData>).forEach((field) => {
+  (Object.keys(rules) as (keyof TData)[]).forEach((field) => {
     const value = (data as Record<keyof TData, unknown>)[field];
     const fieldRules = rules[field];
     if (!fieldRules) return;

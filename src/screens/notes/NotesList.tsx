@@ -38,7 +38,7 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
         updateLastActive();
         loadNotes();
       }
-    }, [isAuthenticated])
+    }, [isAuthenticated, updateLastActive, loadNotes])
   );
 
   const handleAddNote = () => {

@@ -39,7 +39,7 @@ const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigatio
         updateLastActive();
         loadPersonalInfo();
       }
-    }, [isAuthenticated])
+    }, [isAuthenticated, updateLastActive, loadPersonalInfo])
   );
 
   const handleAddPersonalInfo = () => {

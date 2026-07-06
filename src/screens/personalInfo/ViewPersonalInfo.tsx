@@ -50,7 +50,7 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
           }
         });
       }
-    }, [isAuthenticated, id])
+    }, [isAuthenticated, id, updateLastActive, loadPersonalInfo, getPersonalInfoById, navigation])
   );
 
   const getIconName = (): React.ComponentProps<typeof Ionicons>['name'] => {

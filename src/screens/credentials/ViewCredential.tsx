@@ -50,7 +50,7 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
           }
         });
       }
-    }, [isAuthenticated, id])
+    }, [isAuthenticated, id, updateLastActive, loadCredentials, getCredentialById, navigation])
   );
 
   const handleCopy = async (value: string | undefined, label: string) => {

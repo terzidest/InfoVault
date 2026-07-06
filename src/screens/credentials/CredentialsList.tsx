@@ -29,7 +29,7 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
         updateLastActive();
         loadCredentials();
       }
-    }, [isAuthenticated])
+    }, [isAuthenticated, updateLastActive, loadCredentials])
   );
 
   const handleAddCredential = () => {
