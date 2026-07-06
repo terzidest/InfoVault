@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
 
@@ -39,7 +39,7 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation,
 
   const { addPersonalInfo, updatePersonalInfo, isLoading } = usePersonalInfoStore();
   const existing = usePersonalInfoStore((s) => (id ? s.getPersonalInfoById(id) : undefined));
-  const { updateLastActive } = useAuth();
+  const { isAuthenticated, updateLastActive } = useAuth();
 
   const infoTypes = [
     { label: 'Passport', value: 'Passport' },
@@ -53,6 +53,12 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation,
 
   const [formData, setFormData] = useState<FormData>(() => toFormData(existing));
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigation.replace('Authentication');
+    }
+  }, [isAuthenticated, navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: isEditMode ? 'Edit Personal Info' : 'Add Personal Info' });
