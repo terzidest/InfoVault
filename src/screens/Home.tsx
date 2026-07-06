@@ -61,7 +61,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
         loadPersonalInfo();
         loadNotes();
       }
-    }, [isAuthenticated])
+    }, [isAuthenticated, updateLastActive, initSettings, loadCredentials, loadPersonalInfo, loadNotes])
   );
 
   const navigateToCredentials = () => navigation.navigate('CredentialsList');

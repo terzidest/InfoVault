@@ -38,14 +38,14 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
     }
 
     initSettings();
-  }, [isAuthenticated, navigation]);
+  }, [isAuthenticated, navigation, initSettings]);
 
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
       }
-    }, [isAuthenticated])
+    }, [isAuthenticated, updateLastActive])
   );
 
   const handleToggleSetting = (key: ToggleableSettingKey) => {

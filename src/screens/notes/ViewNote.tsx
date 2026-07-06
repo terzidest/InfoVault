@@ -45,7 +45,7 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
           }
         });
       }
-    }, [isAuthenticated, id])
+    }, [isAuthenticated, id, updateLastActive, loadNotes, getNoteById, navigation])
   );
 
   const getCategoryColor = (): string => {

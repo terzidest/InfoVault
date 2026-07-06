@@ -20,6 +20,9 @@ export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenP
 
 declare global {
   namespace ReactNavigation {
+    // React Navigation's documented global-augmentation pattern requires this
+    // member-less interface; a type alias cannot merge into the namespace.
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     interface RootParamList extends RootStackParamList {}
   }
 }
