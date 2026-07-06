@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
 import useAuthStore from '../store/authStore';
-import useSettingsStore from '../store/settingsStore';
 
+// Auth state accessor + one-time init. The auto-lock lifecycle (AppState,
+// idle interval, activity tracking) lives in AutoLockGate, mounted once in
+// App.tsx — this hook is mounted per-screen and must not register listeners.
 const useAuth = () => {
   const {
     isAuthenticated,
@@ -10,32 +11,13 @@ const useAuth = () => {
     logout,
     init,
     updateLastActive,
-    checkTimeout,
   } = useAuthStore();
-
-  const { settings } = useSettingsStore();
 
   useEffect(() => {
     if (!isInitialized) {
       init();
     }
   }, [isInitialized, init]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        const hasTimedOut = checkTimeout(settings.autoLockTimeout);
-
-        if (!hasTimedOut && isAuthenticated) {
-          updateLastActive();
-        }
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isAuthenticated, settings.autoLockTimeout, checkTimeout, updateLastActive]);
 
   return {
     isAuthenticated,
