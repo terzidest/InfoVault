@@ -8,6 +8,21 @@ export const CLIPBOARD_CLEAR_SECONDS = 30;
 let clearTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCopied: string | null = null;
 
+// Called on lock: a secret copied just before locking must not outlive the
+// session on the OS clipboard. Best-effort, same still-ours check as below.
+export const clearSensitiveClipboard = (): void => {
+  if (clearTimer) {
+    clearTimeout(clearTimer);
+    clearTimer = null;
+  }
+  const copied = lastCopied;
+  lastCopied = null;
+  if (copied === null) return;
+  Clipboard.getStringAsync()
+    .then((current) => (current === copied ? Clipboard.setStringAsync('') : undefined))
+    .catch(() => {});
+};
+
 export const copySensitive = async (value: string): Promise<void> => {
   await Clipboard.setStringAsync(value);
   lastCopied = value;

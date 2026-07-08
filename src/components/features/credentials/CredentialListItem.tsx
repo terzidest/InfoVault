@@ -48,4 +48,5 @@ const CredentialListItem: React.FC<CredentialListItemProps> = ({ credential, onP
   );
 };
 
-export default CredentialListItem;
+// Memoized: list re-renders must not re-render every visible row.
+export default React.memo(CredentialListItem);

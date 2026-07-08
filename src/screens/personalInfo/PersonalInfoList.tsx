@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,10 @@ import type { ScreenProps } from '../../types/navigation';
 import type { PersonalInfo } from '../../types/models';
 
 const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigation }) => {
-  const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
+  // Field-level selectors: a whole-store subscription re-renders this screen
+  // (and every visible row) on each isLoading flip, even while unfocused.
+  const personalInfo = usePersonalInfoStore((s) => s.personalInfo);
+  const loadPersonalInfo = usePersonalInfoStore((s) => s.loadPersonalInfo);
   const { isAuthenticated, updateLastActive } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const q = searchQuery.trim().toLowerCase();
@@ -44,9 +47,16 @@ const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigatio
     navigation.navigate('AddPersonalInfo');
   };
 
-  const handleViewPersonalInfo = (info: PersonalInfo) => {
-    navigation.navigate('ViewPersonalInfo', { id: info.id });
-  };
+  const renderItem = useCallback(
+    ({ item }: { item: PersonalInfo }) => (
+      <PersonalInfoListItem
+        personalInfo={item}
+        onPress={() => navigation.navigate('ViewPersonalInfo', { id: item.id })}
+      />
+    ),
+    [navigation]
+  );
+  const keyExtractor = useCallback((item: PersonalInfo) => item.id, []);
 
   const renderEmptyState = () => {
     if (personalInfo.length === 0) {
@@ -81,13 +91,8 @@ const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigatio
 
       <FlatList
         data={filteredPersonalInfo}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <PersonalInfoListItem
-            personalInfo={item}
-            onPress={() => handleViewPersonalInfo(item)}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
         keyboardShouldPersistTaps="handled"

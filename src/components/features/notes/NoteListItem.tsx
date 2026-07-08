@@ -72,4 +72,5 @@ const NoteListItem: React.FC<NoteListItemProps> = ({ note, onPress }) => {
   );
 };
 
-export default NoteListItem;
+// Memoized: list re-renders must not re-render every visible row.
+export default React.memo(NoteListItem);

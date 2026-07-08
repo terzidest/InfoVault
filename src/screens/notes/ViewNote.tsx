@@ -12,7 +12,11 @@ import type { Note } from '../../types/models';
 
 const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
   const { id } = route.params;
-  const { getNoteById, loadNotes, deleteNote, isLoading } = useNotesStore();
+  // Field-level selectors; isLoading is genuinely rendered (Delete spinner).
+  const getNoteById = useNotesStore((s) => s.getNoteById);
+  const loadNotes = useNotesStore((s) => s.loadNotes);
+  const deleteNote = useNotesStore((s) => s.deleteNote);
+  const isLoading = useNotesStore((s) => s.isLoading);
   const { isAuthenticated, updateLastActive } = useAuth();
   const [note, setNote] = useState<Note | null>(null);
 

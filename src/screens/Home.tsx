@@ -39,12 +39,43 @@ const getDailyTip = (): string => {
   return SECURITY_TIPS[dayOfYear % SECURITY_TIPS.length] ?? SECURITY_TIPS[0];
 };
 
+// Module scope, not inside Home: defining a component inside the render body
+// creates a new component type each render, forcing a full unmount/remount of
+// every card on every Home re-render.
+const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, onPress, color, description }) => (
+  <TouchableOpacity
+    className="bg-white rounded-lg p-4 mb-3 shadow-sm border-l-4"
+    style={{ borderLeftColor: color }}
+    onPress={onPress}
+  >
+    <View className="flex-row items-center">
+      <View
+        className="w-12 h-12 rounded-full justify-center items-center mr-4"
+        style={{ backgroundColor: color + '20' }}
+      >
+        <Ionicons name={icon} size={24} color={color} />
+      </View>
+      <View className="flex-1">
+        <Text className="text-base font-medium text-dark">{title}</Text>
+        {description && <Text className="text-xs text-gray-500 mt-0.5">{description}</Text>}
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#999999" />
+    </View>
+  </TouchableOpacity>
+);
+
 const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const { isAuthenticated, updateLastActive } = useAuth();
-  const { credentials, loadCredentials } = useCredentialsStore();
-  const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
-  const { notes, loadNotes } = useNotesStore();
-  const { initSettings } = useSettingsStore();
+  // Field-level selectors: whole-store subscriptions re-render on every set()
+  // to that store (isLoading flips included), even while unfocused beneath
+  // other stack screens. Select only what this screen renders or calls.
+  const credentials = useCredentialsStore((s) => s.credentials);
+  const loadCredentials = useCredentialsStore((s) => s.loadCredentials);
+  const personalInfo = usePersonalInfoStore((s) => s.personalInfo);
+  const loadPersonalInfo = usePersonalInfoStore((s) => s.loadPersonalInfo);
+  const notes = useNotesStore((s) => s.notes);
+  const loadNotes = useNotesStore((s) => s.loadNotes);
+  const initSettings = useSettingsStore((s) => s.initSettings);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -65,28 +96,6 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const navigateToCredentials = () => navigation.navigate('CredentialsList');
   const navigateToPersonalInfo = () => navigation.navigate('PersonalInfoList');
   const navigateToNotes = () => navigation.navigate('NotesList');
-
-  const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, onPress, color, description }) => (
-    <TouchableOpacity
-      className="bg-white rounded-lg p-4 mb-3 shadow-sm border-l-4"
-      style={{ borderLeftColor: color }}
-      onPress={onPress}
-    >
-      <View className="flex-row items-center">
-        <View
-          className="w-12 h-12 rounded-full justify-center items-center mr-4"
-          style={{ backgroundColor: color + '20' }}
-        >
-          <Ionicons name={icon} size={24} color={color} />
-        </View>
-        <View className="flex-1">
-          <Text className="text-base font-medium text-dark">{title}</Text>
-          {description && <Text className="text-xs text-gray-500 mt-0.5">{description}</Text>}
-        </View>
-        <Ionicons name="chevron-forward" size={20} color="#999999" />
-      </View>
-    </TouchableOpacity>
-  );
 
   return (
     <ScrollView className="flex-1 bg-gray-50">

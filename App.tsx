@@ -8,7 +8,10 @@ import AutoLockGate from './src/components/features/AutoLockGate';
 import useAuthStore from './src/store/authStore';
 
 const App: React.FC = () => {
-  const { init, isInitialized } = useAuthStore();
+  // Selectors: a whole-store subscription here re-renders the entire app
+  // (navigator included) on every auth set(), e.g. isLoading during unlock.
+  const init = useAuthStore((s) => s.init);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
 
   useEffect(() => {
     if (!isInitialized) {

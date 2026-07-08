@@ -16,8 +16,12 @@ import type { PersonalInfo } from '../../types/models';
 
 const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, navigation }) => {
   const { id } = route.params;
-  const { getPersonalInfoById, loadPersonalInfo, deletePersonalInfo, isLoading } = usePersonalInfoStore();
-  const { settings } = useSettingsStore();
+  // Field-level selectors; isLoading is genuinely rendered (Delete spinner).
+  const getPersonalInfoById = usePersonalInfoStore((s) => s.getPersonalInfoById);
+  const loadPersonalInfo = usePersonalInfoStore((s) => s.loadPersonalInfo);
+  const deletePersonalInfo = usePersonalInfoStore((s) => s.deletePersonalInfo);
+  const isLoading = usePersonalInfoStore((s) => s.isLoading);
+  const maskSensitiveData = useSettingsStore((s) => s.settings.maskSensitiveData);
   const { isAuthenticated, updateLastActive } = useAuth();
   const [info, setInfo] = useState<PersonalInfo | null>(null);
 
@@ -146,7 +150,7 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
         <PersonalInfoDetailItem
           label="Identifier"
           value={info.identifier}
-          isSensitive={settings.maskSensitiveData}
+          isSensitive={maskSensitiveData}
           onCopy={() => handleCopy(info.identifier, 'Identifier')}
         />
 
