@@ -5,8 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import useAuthStore from '../../store/authStore';
 import useSettingsStore from '../../store/settingsStore';
 
-// Refresh lastActive at most this often while the user is touching the app.
-const TOUCH_THROTTLE_MS = 10_000;
 // How often the idle timeout is evaluated while the app is foregrounded.
 const CHECK_INTERVAL_MS = 5_000;
 
@@ -20,7 +18,6 @@ interface Props {
 // across background transitions. Mounted exactly once, above the navigator.
 const AutoLockGate: React.FC<Props> = ({ children }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const lastTouchRef = useRef(0);
   const appStateRef = useRef(AppState.currentState);
   // Obscures the UI in the OS app switcher so snapshots never show vault
   // content. Starts obscured if mounted while not active (cold-start edge).
@@ -38,13 +35,11 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
     };
   }, [isAuthenticated]);
 
+  // updateLastActive is a plain timestamp assignment (non-reactive by design;
+  // see authStore) — safe to call on every touch without causing renders.
   const handleTouchCapture = useCallback((): boolean => {
-    const now = Date.now();
-    if (now - lastTouchRef.current >= TOUCH_THROTTLE_MS) {
-      lastTouchRef.current = now;
-      const auth = useAuthStore.getState();
-      if (auth.isAuthenticated) auth.updateLastActive();
-    }
+    const auth = useAuthStore.getState();
+    if (auth.isAuthenticated) auth.updateLastActive();
     return false; // never become the responder; touches pass through untouched
   }, []);
 
