@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -36,30 +36,39 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
       // the cancelled flag stops late setState calls and spurious alerts.
       let cancelled = false;
       updateLastActive();
-      loadNotes()
-        .then(() => {
-          if (cancelled) return;
-          const foundNote = getNoteById(id);
-          setNote(foundNote ?? null);
 
-          if (!foundNote) {
-            Alert.alert(
-              'Error',
-              'Note not found. It may have been deleted.',
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            Alert.alert('Error', 'Could not load the note.', [
-              { text: 'OK', onPress: () => navigation.goBack() },
-            ]);
-          }
-        });
+      // Render the cached record immediately (the list screen already loaded
+      // it), then re-read storage only after the push animation finishes so
+      // decryption work never competes with the transition.
+      setNote(getNoteById(id) ?? null);
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        loadNotes()
+          .then(() => {
+            if (cancelled) return;
+            const foundNote = getNoteById(id);
+            setNote(foundNote ?? null);
+
+            if (!foundNote) {
+              Alert.alert(
+                'Error',
+                'Note not found. It may have been deleted.',
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
+              );
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              Alert.alert('Error', 'Could not load the note.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            }
+          });
+      });
 
       return () => {
         cancelled = true;
+        task.cancel();
       };
     }, [isAuthenticated, id, updateLastActive, loadNotes, getNoteById, navigation])
   );

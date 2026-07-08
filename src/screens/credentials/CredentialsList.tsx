@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,10 +25,14 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
 
   useFocusEffect(
     React.useCallback(() => {
-      if (isAuthenticated) {
+      if (!isAuthenticated) return;
+      // Defer the reload (SecureStore reads + decryption) until the
+      // navigation transition has finished, so the animation stays smooth.
+      const task = InteractionManager.runAfterInteractions(() => {
         updateLastActive();
         loadCredentials();
-      }
+      });
+      return () => task.cancel();
     }, [isAuthenticated, updateLastActive, loadCredentials])
   );
 

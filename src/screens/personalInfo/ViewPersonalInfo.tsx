@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -41,30 +41,39 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
       // the cancelled flag stops late setState calls and spurious alerts.
       let cancelled = false;
       updateLastActive();
-      loadPersonalInfo()
-        .then(() => {
-          if (cancelled) return;
-          const foundInfo = getPersonalInfoById(id);
-          setInfo(foundInfo ?? null);
 
-          if (!foundInfo) {
-            Alert.alert(
-              'Error',
-              'Personal information not found. It may have been deleted.',
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            Alert.alert('Error', 'Could not load the information.', [
-              { text: 'OK', onPress: () => navigation.goBack() },
-            ]);
-          }
-        });
+      // Render the cached record immediately (the list screen already loaded
+      // it), then re-read storage only after the push animation finishes so
+      // decryption work never competes with the transition.
+      setInfo(getPersonalInfoById(id) ?? null);
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        loadPersonalInfo()
+          .then(() => {
+            if (cancelled) return;
+            const foundInfo = getPersonalInfoById(id);
+            setInfo(foundInfo ?? null);
+
+            if (!foundInfo) {
+              Alert.alert(
+                'Error',
+                'Personal information not found. It may have been deleted.',
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
+              );
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              Alert.alert('Error', 'Could not load the information.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            }
+          });
+      });
 
       return () => {
         cancelled = true;
+        task.cancel();
       };
     }, [isAuthenticated, id, updateLastActive, loadPersonalInfo, getPersonalInfoById, navigation])
   );

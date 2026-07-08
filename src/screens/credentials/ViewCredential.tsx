@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -41,30 +41,39 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
       // the cancelled flag stops late setState calls and spurious alerts.
       let cancelled = false;
       updateLastActive();
-      loadCredentials()
-        .then(() => {
-          if (cancelled) return;
-          const foundCredential = getCredentialById(id);
-          setCredential(foundCredential ?? null);
 
-          if (!foundCredential) {
-            Alert.alert(
-              'Error',
-              'Credential not found. It may have been deleted.',
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            Alert.alert('Error', 'Could not load the credential.', [
-              { text: 'OK', onPress: () => navigation.goBack() },
-            ]);
-          }
-        });
+      // Render the cached record immediately (the list screen already loaded
+      // it), then re-read storage only after the push animation finishes so
+      // decryption work never competes with the transition.
+      setCredential(getCredentialById(id) ?? null);
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        loadCredentials()
+          .then(() => {
+            if (cancelled) return;
+            const foundCredential = getCredentialById(id);
+            setCredential(foundCredential ?? null);
+
+            if (!foundCredential) {
+              Alert.alert(
+                'Error',
+                'Credential not found. It may have been deleted.',
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
+              );
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              Alert.alert('Error', 'Could not load the credential.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            }
+          });
+      });
 
       return () => {
         cancelled = true;
+        task.cancel();
       };
     }, [isAuthenticated, id, updateLastActive, loadCredentials, getCredentialById, navigation])
   );
