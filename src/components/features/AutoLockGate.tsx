@@ -25,17 +25,16 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
   const [isObscured, setIsObscured] = useState(AppState.currentState !== 'active');
 
   // Single authority for lock-driven navigation: when the vault locks,
-  // collapse the entire stack to Authentication exactly once. (Per-screen
-  // replace guards used to fire once per mounted screen, stacking extra
-  // Authentication routes on every lock cycle.)
-  const wasAuthenticatedRef = useRef(false);
+  // collapse the entire stack to Authentication exactly once, synchronously
+  // with the store update (a useEffect fires a commit later and can race
+  // in-flight navigation). No screen may navigate on lock itself.
   useEffect(() => {
-    const wasAuthenticated = wasAuthenticatedRef.current;
-    wasAuthenticatedRef.current = isAuthenticated;
-    if (wasAuthenticated && !isAuthenticated && navigationRef.isReady()) {
-      navigationRef.resetRoot({ index: 0, routes: [{ name: 'Authentication' }] });
-    }
-  }, [isAuthenticated]);
+    return useAuthStore.subscribe((state, prevState) => {
+      if (prevState.isAuthenticated && !state.isAuthenticated && navigationRef.isReady()) {
+        navigationRef.resetRoot({ index: 0, routes: [{ name: 'Authentication' }] });
+      }
+    });
+  }, []);
 
   // Block screenshots and screen recording while the vault is unlocked
   // (FLAG_SECURE on Android; recording/mirroring protection on iOS).

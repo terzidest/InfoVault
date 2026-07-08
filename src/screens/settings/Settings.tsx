@@ -83,8 +83,10 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
           text: 'Lock',
           style: 'destructive',
           onPress: () => {
+            // Navigation to the lock screen happens centrally (AutoLockGate
+            // resets the stack on logout) — never navigate here too, or the
+            // stack accumulates a route per lock cycle.
             logout();
-            navigation.replace('Authentication');
           },
         },
       ]
