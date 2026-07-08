@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, InteractionManager } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -46,21 +46,19 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const { notes, loadNotes } = useNotesStore();
   const { initSettings } = useSettingsStore();
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-    }
-  }, [isAuthenticated, navigation]);
-
   useFocusEffect(
     React.useCallback(() => {
-      if (isAuthenticated) {
+      if (!isAuthenticated) return;
+      // Defer store reloads (SecureStore reads + per-record decryption) until
+      // the navigation transition has finished, so the animation stays smooth.
+      const task = InteractionManager.runAfterInteractions(() => {
         updateLastActive();
         initSettings();
         loadCredentials();
         loadPersonalInfo();
         loadNotes();
-      }
+      });
+      return () => task.cancel();
     }, [isAuthenticated, updateLastActive, initSettings, loadCredentials, loadPersonalInfo, loadNotes])
   );
 

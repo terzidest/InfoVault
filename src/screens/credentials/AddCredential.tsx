@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,19 +36,13 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, rou
 
   const { addCredential, updateCredential, isLoading } = useCredentialsStore();
   const existing = useCredentialsStore((s) => (id ? s.getCredentialById(id) : undefined));
-  const { isAuthenticated, updateLastActive } = useAuth();
+  const { updateLastActive } = useAuth();
 
   const [formData, setFormData] = useState<FormData>(() => toFormData(existing));
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [passwordStrength, setPasswordStrength] = useState(() =>
     checkPasswordStrength(existing?.password)
   );
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-    }
-  }, [isAuthenticated, navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: isEditMode ? 'Edit Credential' : 'Add Credential' });

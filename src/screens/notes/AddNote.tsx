@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { scale } from 'react-native-size-matters';
 
@@ -31,16 +31,10 @@ const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation, route }) => {
 
   const { addNote, updateNote, categories, isLoading } = useNotesStore();
   const existing = useNotesStore((s) => (id ? s.getNoteById(id) : undefined));
-  const { isAuthenticated, updateLastActive } = useAuth();
+  const { updateLastActive } = useAuth();
 
   const [formData, setFormData] = useState<FormData>(() => toFormData(existing));
   const [formErrors, setFormErrors] = useState<FormErrors>({});
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-    }
-  }, [isAuthenticated, navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: isEditMode ? 'Edit Note' : 'Add Note' });

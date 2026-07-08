@@ -8,6 +8,12 @@ import useCredentialsStore from './credentialsStore';
 import useNotesStore from './notesStore';
 import usePersonalInfoStore from './personalInfoStore';
 
+// Last user-activity timestamp for the idle timeout. Deliberately NOT part
+// of the reactive store state: it changes on every touch, nothing renders
+// it, and putting it through set() re-rendered every mounted screen
+// mid-gesture (dropped taps, janky transitions).
+let lastActivityAt = Date.now();
+
 const SETUP_KEY = 'setupComplete';
 const SALT_KEY = 'vaultSalt';
 const VERIFIER_KEY = 'vaultVerifier';
@@ -19,7 +25,6 @@ interface AuthState {
   isInitialized: boolean;
   isLoading: boolean;
   authError: string | null;
-  lastActive: Date;
   needsSetup: boolean;
   // In-memory only. Never persisted in plaintext, never logged. Cleared on lock.
   encryptionKey: Uint8Array | null;
@@ -41,7 +46,6 @@ const useAuthStore = create<AuthState>((set, get) => ({
   isInitialized: false,
   isLoading: false,
   authError: null,
-  lastActive: new Date(),
   needsSetup: false,
   encryptionKey: null,
   biometricAvailable: false,
@@ -99,12 +103,12 @@ const useAuthStore = create<AuthState>((set, get) => ({
       await wipeAllRecords();
       await SecureStore.setItemAsync(SETUP_KEY, 'true');
 
+      lastActivityAt = Date.now();
       set({
         encryptionKey: key,
         isAuthenticated: true,
         needsSetup: false,
         isLoading: false,
-        lastActive: new Date(),
       });
       return true;
     } catch (error) {
@@ -130,11 +134,11 @@ const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
+      lastActivityAt = Date.now();
       set({
         encryptionKey: key,
         isAuthenticated: true,
         isLoading: false,
-        lastActive: new Date(),
         authError: null,
       });
       return true;
@@ -157,11 +161,11 @@ const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
       const sessionKey = hexToBytes(keyHex);
+      lastActivityAt = Date.now();
       set({
         encryptionKey: sessionKey,
         isAuthenticated: true,
         isLoading: false,
-        lastActive: new Date(),
         authError: null,
       });
       return true;
@@ -216,18 +220,15 @@ const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateLastActive: () => {
-    set({ lastActive: new Date() });
+    lastActivityAt = Date.now();
   },
 
   checkTimeout: (timeoutDuration = 300000) => {
-    const { lastActive, isAuthenticated, logout } = get();
+    const { isAuthenticated, logout } = get();
 
     if (!isAuthenticated) return;
 
-    const now = new Date();
-    const timeDiff = now.getTime() - lastActive.getTime();
-
-    if (timeDiff > timeoutDuration) {
+    if (Date.now() - lastActivityAt > timeoutDuration) {
       logout();
       return true;
     }
