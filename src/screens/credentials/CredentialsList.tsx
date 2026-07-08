@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,10 @@ import type { ScreenProps } from '../../types/navigation';
 import type { Credential } from '../../types/models';
 
 const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation }) => {
-  const { credentials, loadCredentials } = useCredentialsStore();
+  // Field-level selectors: a whole-store subscription re-renders this screen
+  // (and every visible row) on each isLoading flip, even while unfocused.
+  const credentials = useCredentialsStore((s) => s.credentials);
+  const loadCredentials = useCredentialsStore((s) => s.loadCredentials);
   const { isAuthenticated, updateLastActive } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const q = searchQuery.trim().toLowerCase();
@@ -34,9 +37,16 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
     navigation.navigate('AddCredential');
   };
 
-  const handleViewCredential = (credential: Credential) => {
-    navigation.navigate('ViewCredential', { id: credential.id });
-  };
+  const renderItem = useCallback(
+    ({ item }: { item: Credential }) => (
+      <CredentialListItem
+        credential={item}
+        onPress={() => navigation.navigate('ViewCredential', { id: item.id })}
+      />
+    ),
+    [navigation]
+  );
+  const keyExtractor = useCallback((item: Credential) => item.id, []);
 
   const filteredCredentials = q
     ? credentials.filter(
@@ -80,13 +90,8 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
 
       <FlatList
         data={filteredCredentials}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <CredentialListItem
-            credential={item}
-            onPress={() => handleViewCredential(item)}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
         keyboardShouldPersistTaps="handled"

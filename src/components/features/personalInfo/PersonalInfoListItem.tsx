@@ -68,4 +68,5 @@ const PersonalInfoListItem: React.FC<PersonalInfoListItemProps> = ({ personalInf
   );
 };
 
-export default PersonalInfoListItem;
+// Memoized: list re-renders must not re-render every visible row.
+export default React.memo(PersonalInfoListItem);

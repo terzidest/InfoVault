@@ -16,8 +16,12 @@ import type { Credential } from '../../types/models';
 
 const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, navigation }) => {
   const { id } = route.params;
-  const { getCredentialById, loadCredentials, deleteCredential, isLoading } = useCredentialsStore();
-  const { settings } = useSettingsStore();
+  // Field-level selectors; isLoading is genuinely rendered (Delete spinner).
+  const getCredentialById = useCredentialsStore((s) => s.getCredentialById);
+  const loadCredentials = useCredentialsStore((s) => s.loadCredentials);
+  const deleteCredential = useCredentialsStore((s) => s.deleteCredential);
+  const isLoading = useCredentialsStore((s) => s.isLoading);
+  const maskSensitiveData = useSettingsStore((s) => s.settings.maskSensitiveData);
   const { isAuthenticated, updateLastActive } = useAuth();
   const [credential, setCredential] = useState<Credential | null>(null);
 
@@ -142,7 +146,7 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
         <CredentialDetailItem
           label="Password"
           value={credential.password}
-          isSensitive={settings.maskSensitiveData}
+          isSensitive={maskSensitiveData}
           onCopy={() => handleCopy(credential.password, 'Password')}
         />
 

@@ -46,7 +46,12 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
   useEffect(() => {
     if (!isAuthenticated) return;
     animationRef.current?.play();
-    const timer = setTimeout(() => navigation.replace('Home'), UNLOCK_ANIMATION_MS);
+    const timer = setTimeout(() => {
+      // If the vault re-locked during the animation window, a stale timer
+      // must never navigate past the lock screen.
+      if (!useAuthStore.getState().isAuthenticated) return;
+      navigation.replace('Home');
+    }, UNLOCK_ANIMATION_MS);
     return () => clearTimeout(timer);
   }, [isAuthenticated, navigation]);
 

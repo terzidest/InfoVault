@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,10 @@ import type { ScreenProps } from '../../types/navigation';
 import type { Note } from '../../types/models';
 
 const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
-  const { notes, loadNotes } = useNotesStore();
+  // Field-level selectors: a whole-store subscription re-renders this screen
+  // (and every visible row) on each isLoading flip, even while unfocused.
+  const notes = useNotesStore((s) => s.notes);
+  const loadNotes = useNotesStore((s) => s.loadNotes);
   const { isAuthenticated, updateLastActive } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const q = searchQuery.trim().toLowerCase();
@@ -43,9 +46,13 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
     navigation.navigate('AddNote');
   };
 
-  const handleViewNote = (note: Note) => {
-    navigation.navigate('ViewNote', { id: note.id });
-  };
+  const renderItem = useCallback(
+    ({ item }: { item: Note }) => (
+      <NoteListItem note={item} onPress={() => navigation.navigate('ViewNote', { id: item.id })} />
+    ),
+    [navigation]
+  );
+  const keyExtractor = useCallback((item: Note) => item.id, []);
 
   const renderEmptyState = () => {
     if (notes.length === 0) {
@@ -80,10 +87,8 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
 
       <FlatList
         data={filteredNotes}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <NoteListItem note={item} onPress={() => handleViewNote(item)} />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
         keyboardShouldPersistTaps="handled"

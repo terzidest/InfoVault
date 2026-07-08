@@ -4,6 +4,7 @@ import { bytesToHex, hexToBytes } from '@noble/ciphers/utils';
 import { generateSalt, deriveKey, makeVerifier, verifyKey } from '../utils/crypto';
 import { wipeAllRecords } from '../services/secureStorage';
 import { checkAuthenticationTypes } from '../services/authentication';
+import { clearSensitiveClipboard } from '../services/clipboard';
 import useCredentialsStore from './credentialsStore';
 import useNotesStore from './notesStore';
 import usePersonalInfoStore from './personalInfoStore';
@@ -217,6 +218,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
     useCredentialsStore.getState().clearCredentials();
     useNotesStore.getState().clearNotes();
     usePersonalInfoStore.getState().clearPersonalInfo();
+    clearSensitiveClipboard();
   },
 
   updateLastActive: () => {

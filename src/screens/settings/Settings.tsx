@@ -16,7 +16,11 @@ type ToggleableSettingKey = {
 }[keyof SettingsType];
 
 const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
-  const { settings, initSettings, updateSettings, resetSettings } = useSettingsStore();
+  // Field-level selectors: skip the isLoading/error interim re-renders.
+  const settings = useSettingsStore((s) => s.settings);
+  const initSettings = useSettingsStore((s) => s.initSettings);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const resetSettings = useSettingsStore((s) => s.resetSettings);
   const { isAuthenticated, updateLastActive, logout } = useAuth();
   const biometricAvailable = useAuthStore((s) => s.biometricAvailable);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
