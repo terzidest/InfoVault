@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, InteractionManager } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,12 +45,6 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const { personalInfo, loadPersonalInfo } = usePersonalInfoStore();
   const { notes, loadNotes } = useNotesStore();
   const { initSettings } = useSettingsStore();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-    }
-  }, [isAuthenticated, navigation]);
 
   useFocusEffect(
     React.useCallback(() => {

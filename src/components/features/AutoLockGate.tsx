@@ -4,6 +4,7 @@ import * as ScreenCapture from 'expo-screen-capture';
 import { Ionicons } from '@expo/vector-icons';
 import useAuthStore from '../../store/authStore';
 import useSettingsStore from '../../store/settingsStore';
+import { navigationRef } from '../../navigation/appNavigator';
 
 // How often the idle timeout is evaluated while the app is foregrounded.
 const CHECK_INTERVAL_MS = 5_000;
@@ -22,6 +23,19 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
   // Obscures the UI in the OS app switcher so snapshots never show vault
   // content. Starts obscured if mounted while not active (cold-start edge).
   const [isObscured, setIsObscured] = useState(AppState.currentState !== 'active');
+
+  // Single authority for lock-driven navigation: when the vault locks,
+  // collapse the entire stack to Authentication exactly once. (Per-screen
+  // replace guards used to fire once per mounted screen, stacking extra
+  // Authentication routes on every lock cycle.)
+  const wasAuthenticatedRef = useRef(false);
+  useEffect(() => {
+    const wasAuthenticated = wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = isAuthenticated;
+    if (wasAuthenticated && !isAuthenticated && navigationRef.isReady()) {
+      navigationRef.resetRoot({ index: 0, routes: [{ name: 'Authentication' }] });
+    }
+  }, [isAuthenticated]);
 
   // Block screenshots and screen recording while the vault is unlocked
   // (FLAG_SECURE on Android; recording/mirroring protection on iOS).

@@ -32,13 +32,10 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
   ];
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-      return;
+    if (isAuthenticated) {
+      initSettings();
     }
-
-    initSettings();
-  }, [isAuthenticated, navigation, initSettings]);
+  }, [isAuthenticated, initSettings]);
 
   useFocusEffect(
     React.useCallback(() => {

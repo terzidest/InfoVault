@@ -22,16 +22,10 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
   const [credential, setCredential] = useState<Credential | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-      return;
-    }
-
     if (!id) {
       navigation.goBack();
-      return;
     }
-  }, [isAuthenticated, id, navigation]);
+  }, [id, navigation]);
 
   useFocusEffect(
     React.useCallback(() => {

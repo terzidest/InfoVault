@@ -1,5 +1,5 @@
 import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Home from "../screens/Home";
@@ -22,11 +22,17 @@ import type { RootStackParamList } from "../types/navigation";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Imperative handle for auth-driven navigation. On lock, AutoLockGate resets
+// the whole stack to Authentication in ONE place — screens must not guard
+// themselves with navigation.replace, which used to fire once per mounted
+// screen and leak stacked Authentication routes on every lock cycle.
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
 const AppNavigator: React.FC = () => {
   const needsSetup = useAuthStore((state) => state.needsSetup);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName={needsSetup ? "SetupMasterPassword" : "Authentication"}
         screenOptions={({ route }) => ({

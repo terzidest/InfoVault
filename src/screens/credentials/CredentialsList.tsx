@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,12 +16,6 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
   const { isAuthenticated, updateLastActive } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const q = searchQuery.trim().toLowerCase();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-    }
-  }, [isAuthenticated, navigation]);
 
   useFocusEffect(
     React.useCallback(() => {

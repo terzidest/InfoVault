@@ -17,16 +17,10 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
   const [note, setNote] = useState<Note | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-      return;
-    }
-
     if (!id) {
       navigation.goBack();
-      return;
     }
-  }, [isAuthenticated, id, navigation]);
+  }, [id, navigation]);
 
   useFocusEffect(
     React.useCallback(() => {

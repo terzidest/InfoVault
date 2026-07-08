@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,12 +25,6 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
           note.category?.toLowerCase().includes(q)
       )
     : notes;
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigation.replace('Authentication');
-    }
-  }, [isAuthenticated, navigation]);
 
   useFocusEffect(
     React.useCallback(() => {
