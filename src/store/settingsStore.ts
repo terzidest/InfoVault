@@ -28,8 +28,10 @@ const useSettingsStore = create<SettingsState>((set, get) => ({
       const storedSettings = await SecureStore.getItemAsync('appSettings');
 
       if (storedSettings) {
+        // Merge over defaults so a settings blob written by an older app
+        // version (missing newer keys) can never produce undefined settings.
         set({
-          settings: JSON.parse(storedSettings) as Settings,
+          settings: { ...DEFAULT_SETTINGS, ...(JSON.parse(storedSettings) as Partial<Settings>) },
           isLoading: false,
         });
       } else {

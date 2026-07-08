@@ -38,6 +38,11 @@ class UnbiasedRandom {
 
   async nextInt(max: number): Promise<number> {
     if (max <= 0) return 0;
+    if (max > 256) {
+      // Single-byte rejection sampling can't produce values above 256 — the
+      // limit would be 0 and the loop below would never terminate.
+      throw new Error('UnbiasedRandom.nextInt supports max up to 256');
+    }
     const limit = 256 - (256 % max); // largest multiple of max that fits in a byte
     // Reject bytes in the biased tail [limit, 256) and draw again.
     let byte = await this.nextByte();
@@ -68,7 +73,9 @@ export const generatePassword = async (
   if (pools.length === 0) pools.push(LOWER); // never return an empty password
 
   const charset = pools.join('');
-  const targetLength = Math.max(length, pools.length); // room for one of each class
+  // Cap at 256: the Fisher–Yates shuffle draws nextInt(i + 1), and the
+  // single-byte sampler can't go beyond 256. Far above any sane password.
+  const targetLength = Math.min(Math.max(length, pools.length), 256);
 
   const rng = new UnbiasedRandom(targetLength * 2);
   const chars: string[] = [];

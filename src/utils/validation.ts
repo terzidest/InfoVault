@@ -11,8 +11,10 @@ export const isValidEmail = (email: string): boolean => {
 
 export const isValidUrl = (url: string): boolean => {
   try {
-    new URL(url);
-    return true;
+    // Only web URLs make sense for the website field; new URL() alone would
+    // also accept javascript:, mailto:, or any custom scheme.
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
   }
@@ -22,8 +24,15 @@ export const isValidDate = (dateString: string): boolean => {
   const regex = /^\d{4}-\d{2}-\d{2}$/;
   if (!regex.test(dateString)) return false;
 
-  const date = new Date(dateString);
-  return date instanceof Date && !isNaN(date.getTime());
+  // new Date('2026-02-30') silently rolls over to March 2, so compare the
+  // parsed components back against the input to reject non-existent dates.
+  const [year, month, day] = dateString.split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 };
 
 export const isValidCardNumber = (cardNumber: string): boolean => {
