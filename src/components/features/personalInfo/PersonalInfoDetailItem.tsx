@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obfuscateText } from '../../../utils/masking';
+import { colors } from '../../../theme/colors';
 
 interface PersonalInfoDetailItemProps {
   label: string;
@@ -61,11 +62,16 @@ const PersonalInfoDetailItem: React.FC<PersonalInfoDetailItemProps> = ({
 
         <View className="flex-row items-center">
           {isSensitive && (
-            <TouchableOpacity className="p-1 ml-2" onPress={toggleReveal}>
+            <TouchableOpacity
+              className="p-1 ml-2"
+              onPress={toggleReveal}
+              accessibilityRole="button"
+              accessibilityLabel={isRevealed ? `Hide ${label}` : `Reveal ${label}`}
+            >
               <Ionicons
                 name={isRevealed ? 'eye-off-outline' : 'eye-outline'}
                 size={18}
-                color="#FFC107"
+                color={colors.secondary}
               />
             </TouchableOpacity>
           )}
@@ -74,8 +80,10 @@ const PersonalInfoDetailItem: React.FC<PersonalInfoDetailItemProps> = ({
             <TouchableOpacity
               className="p-1 ml-2 bg-white rounded-full"
               onPress={onCopy}
+              accessibilityRole="button"
+              accessibilityLabel={`Copy ${label}`}
             >
-              <Ionicons name="copy-outline" size={18} color="#FFC107" />
+              <Ionicons name="copy-outline" size={18} color={colors.secondary} />
             </TouchableOpacity>
           )}
         </View>

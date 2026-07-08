@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../theme/colors';
 
 export interface SelectOption<T extends string | number> {
   label: string;
@@ -30,7 +31,7 @@ function Select<T extends string | number>({
 
   const selected = options.find((o) => o.value === value);
   const isPlaceholder = !selected || selected.value === '';
-  const displayLabel = !isPlaceholder ? selected!.label : placeholder;
+  const displayLabel = !selected || selected.value === '' ? placeholder : selected.label;
 
   // Options the user can actually pick (exclude an empty-value sentinel like "Select Type...").
   const selectableOptions = options.filter((o) => o.value !== '');
@@ -86,7 +87,7 @@ function Select<T extends string | number>({
                     <Text className={`text-base ${isSelected ? 'text-primary font-semibold' : 'text-dark'}`}>
                       {option.label}
                     </Text>
-                    {isSelected && <Ionicons name="checkmark" size={20} color="#006E90" />}
+                    {isSelected && <Ionicons name="checkmark" size={20} color={colors.primary} />}
                   </Pressable>
                 );
               })}

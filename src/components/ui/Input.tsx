@@ -5,6 +5,7 @@ import {
   Text,
   TouchableOpacity,
   StyleProp,
+  TextStyle,
   ViewStyle,
   TextInputProps,
 } from 'react-native';
@@ -20,6 +21,10 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
   helperText?: string;
   multiline?: boolean;
   style?: StyleProp<ViewStyle>;
+  // Sizes the TextInput itself. Never fix the container's height via `style`:
+  // the helper/error text renders below the field and would overflow onto
+  // whatever follows the input.
+  inputStyle?: StyleProp<TextStyle>;
   sensitive?: boolean;
 }
 
@@ -33,6 +38,7 @@ const Input: React.FC<InputProps> = ({
   helperText,
   multiline = false,
   style,
+  inputStyle,
   sensitive = false,
   ...props
 }) => {
@@ -61,6 +67,7 @@ const Input: React.FC<InputProps> = ({
             ${error ? 'border-danger' : 'border-gray-200'}
             ${multiline ? 'min-h-[100px] py-2.5 text-left' : ''}
           `}
+          style={inputStyle}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -75,6 +82,8 @@ const Input: React.FC<InputProps> = ({
           <TouchableOpacity
             className="absolute right-3 top-1/2 -mt-2.5"
             onPress={() => setSecureTextEntry(!secureTextEntry)}
+            accessibilityRole="button"
+            accessibilityLabel={secureTextEntry ? 'Show value' : 'Hide value'}
           >
             <Ionicons
               name={secureTextEntry ? 'eye-outline' : 'eye-off-outline'}

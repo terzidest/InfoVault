@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obfuscateText } from '../../../utils/masking';
+import { colors } from '../../../theme/colors';
 
 interface CredentialDetailItemProps {
   label: string;
@@ -55,11 +56,16 @@ const CredentialDetailItem: React.FC<CredentialDetailItemProps> = ({
 
         <View className="flex-row items-center">
           {isSensitive && (
-            <TouchableOpacity className="p-1 ml-2" onPress={toggleReveal}>
+            <TouchableOpacity
+              className="p-1 ml-2"
+              onPress={toggleReveal}
+              accessibilityRole="button"
+              accessibilityLabel={isRevealed ? `Hide ${label}` : `Reveal ${label}`}
+            >
               <Ionicons
                 name={isRevealed ? 'eye-off-outline' : 'eye-outline'}
                 size={18}
-                color="#006E90"
+                color={colors.primary}
               />
             </TouchableOpacity>
           )}
@@ -68,8 +74,10 @@ const CredentialDetailItem: React.FC<CredentialDetailItemProps> = ({
             <TouchableOpacity
               className="p-1 ml-2 bg-white rounded-full"
               onPress={onCopy}
+              accessibilityRole="button"
+              accessibilityLabel={`Copy ${label}`}
             >
-              <Ionicons name="copy-outline" size={18} color="#006E90" />
+              <Ionicons name="copy-outline" size={18} color={colors.primary} />
             </TouchableOpacity>
           )}
         </View>

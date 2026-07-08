@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { useFocusEffect } from '@react-navigation/native';
 
 import useNotesStore from '../../store/notesStore';
+import { colors, noteCategoryColor } from '../../theme/colors';
 import useAuth from '../../hooks/useAuth';
 import Button from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatters';
@@ -71,24 +72,7 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
     }, [isAuthenticated, id, updateLastActive, loadNotes, getNoteById, navigation])
   );
 
-  const getCategoryColor = (): string => {
-    if (!note) return '#9C27B0';
-
-    const category = note.category?.toLowerCase() || '';
-
-    switch (category) {
-      case 'personal':
-        return '#4CAF50';
-      case 'work':
-        return '#2196F3';
-      case 'financial':
-        return '#FFC107';
-      case 'health':
-        return '#F44336';
-      default:
-        return '#9C27B0';
-    }
-  };
+  const getCategoryColor = (): string => noteCategoryColor(note?.category);
 
   const handleDelete = () => {
     Alert.alert(
@@ -123,7 +107,7 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
   if (!note) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading note...</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }

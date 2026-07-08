@@ -10,6 +10,7 @@ import Input from '../../components/ui/Input';
 import { checkPasswordStrength } from '../../utils/crypto';
 import { generatePassword } from '../../utils/password';
 import { validateFields, ValidationRules } from '../../utils/validation';
+import { colors } from '../../theme/colors';
 import type { ScreenProps } from '../../types/navigation';
 import type { Credential, CredentialInput } from '../../types/models';
 
@@ -69,9 +70,9 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, rou
   };
 
   const getStrengthColor = (): string => {
-    if (passwordStrength < 30) return '#F44336';
-    if (passwordStrength < 60) return '#FFC107';
-    return '#4CAF50';
+    if (passwordStrength < 30) return colors.danger;
+    if (passwordStrength < 60) return colors.secondary;
+    return colors.success;
   };
 
   const handleGenerate = async () => {
@@ -152,7 +153,7 @@ const AddCredential: React.FC<ScreenProps<'AddCredential'>> = ({ navigation, rou
             onPress={handleGenerate}
             activeOpacity={0.7}
           >
-            <Ionicons name="refresh-outline" size={scale(16)} color="#006E90" />
+            <Ionicons name="refresh-outline" size={scale(16)} color={colors.primary} />
             <Text style={styles.generateText}>Generate strong password</Text>
           </TouchableOpacity>
 

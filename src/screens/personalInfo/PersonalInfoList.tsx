@@ -98,7 +98,12 @@ const PersonalInfoList: React.FC<ScreenProps<'PersonalInfoList'>> = ({ navigatio
         keyboardShouldPersistTaps="handled"
       />
 
-      <TouchableOpacity style={styles.addButton} onPress={handleAddPersonalInfo}>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={handleAddPersonalInfo}
+        accessibilityRole="button"
+        accessibilityLabel="Add personal information"
+      >
         <Ionicons name="add" size={scale(24)} color="#FFFFFF" />
       </TouchableOpacity>
     </View>

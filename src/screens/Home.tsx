@@ -10,6 +10,7 @@ import useNotesStore from '../store/notesStore';
 import useSettingsStore from '../store/settingsStore';
 
 import Card from '../components/ui/Card';
+import { colors } from '../theme/colors';
 import type { ScreenProps } from '../types/navigation';
 
 interface CategoryCardProps {
@@ -59,7 +60,7 @@ const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, onPress, color
         <Text className="text-base font-medium text-dark">{title}</Text>
         {description && <Text className="text-xs text-gray-500 mt-0.5">{description}</Text>}
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#999999" />
+      <Ionicons name="chevron-forward" size={20} color={colors.muted} />
     </View>
   </TouchableOpacity>
 );
@@ -127,7 +128,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
           description="Store website logins and passwords"
           icon="key-outline"
           onPress={navigateToCredentials}
-          color="#006E90"
+          color={colors.primary}
         />
 
         <CategoryCard
@@ -135,7 +136,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
           description="Passports, licenses and ID numbers"
           icon="card-outline"
           onPress={navigateToPersonalInfo}
-          color="#FFC107"
+          color={colors.secondary}
         />
 
         <CategoryCard
@@ -143,7 +144,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
           description="Secure private notes and ideas"
           icon="document-text-outline"
           onPress={navigateToNotes}
-          color="#4CAF50"
+          color={colors.success}
         />
       </View>
 

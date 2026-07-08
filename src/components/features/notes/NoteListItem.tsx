@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatRelativeTime, truncateText } from '../../../utils/formatters';
+import { noteCategoryColor } from '../../../theme/colors';
 import type { Note } from '../../../types/models';
 
 interface NoteListItemProps {
@@ -10,24 +11,7 @@ interface NoteListItemProps {
 }
 
 const NoteListItem: React.FC<NoteListItemProps> = ({ note, onPress }) => {
-  const getCategoryColor = (): string => {
-    const category = note.category?.toLowerCase() || '';
-
-    switch (category) {
-      case 'personal':
-        return '#4CAF50';
-      case 'work':
-        return '#2196F3';
-      case 'financial':
-        return '#FFC107';
-      case 'health':
-        return '#F44336';
-      default:
-        return '#9C27B0';
-    }
-  };
-
-  const categoryColor = getCategoryColor();
+  const categoryColor = noteCategoryColor(note.category);
 
   return (
     <TouchableOpacity
