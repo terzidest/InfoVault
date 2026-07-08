@@ -36,7 +36,6 @@ export interface PersonalInfo {
   issueDate?: string;
   expiryDate?: string;
   issuingAuthority?: string;
-  description?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -59,11 +58,4 @@ export interface AuthTypes {
   hasFaceId: boolean;
   hasFingerprintId: boolean;
   hasIris: boolean;
-}
-
-export interface PremiumFeature {
-  id: string;
-  name: string;
-  description: string;
-  available: boolean;
 }

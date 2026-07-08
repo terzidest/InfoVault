@@ -1,31 +1,9 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import type { AuthTypes } from '../types/models';
 
-export const authenticate = async (): Promise<boolean> => {
-  try {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    if (!hasHardware) {
-      console.warn('Biometric hardware not available');
-    }
-
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    if (!isEnrolled && hasHardware) {
-      console.warn('No biometric credentials enrolled');
-    }
-
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Authenticate to access your vault',
-      fallbackLabel: 'Use PIN/Password',
-      disableDeviceFallback: false,
-    });
-
-    return result.success;
-  } catch (error) {
-    console.error('Authentication error:', error);
-    return false;
-  }
-};
-
+// Biometric *unlock* does not go through this module — authStore gates the
+// key behind SecureStore's requireAuthentication instead. This service only
+// reports device capability for the settings/unlock UI.
 export const checkAuthenticationTypes = async (): Promise<AuthTypes> => {
   try {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
