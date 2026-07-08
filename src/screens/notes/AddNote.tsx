@@ -61,7 +61,10 @@ const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation, route }) => {
 
     const validationRules: ValidationRules<FormData> = {
       title: { required: true, maxLength: 100 },
-      content: { required: true, maxLength: 10000 },
+      // SecureStore warns above ~2048 bytes per value and the hex-encoded
+      // AES-GCM seal roughly doubles the plaintext, so long notes risk
+      // failing to persist. Honest cap until the seal migrates to base64.
+      content: { required: true, maxLength: 900 },
       category: { required: true },
     };
 

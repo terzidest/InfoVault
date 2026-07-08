@@ -3,7 +3,15 @@ export type DateFormat = 'short' | 'medium' | 'full';
 export const formatDate = (date: string | Date | null | undefined, format: DateFormat = 'full'): string => {
   if (!date) return '';
 
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  // Date-only strings must be parsed as LOCAL dates: new Date('2026-07-06')
+  // is UTC midnight, which toLocaleDateString renders as the previous day in
+  // timezones west of UTC.
+  const dateOnly = typeof date === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(date) : null;
+  const dateObj = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : typeof date === 'string'
+      ? new Date(date)
+      : date;
 
   if (isNaN(dateObj.getTime())) return '';
 
