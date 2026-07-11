@@ -94,7 +94,12 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
         keyboardShouldPersistTaps="handled"
       />
 
-      <TouchableOpacity style={styles.addButton} onPress={handleAddNote}>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={handleAddNote}
+        accessibilityRole="button"
+        accessibilityLabel="Add note"
+      >
         <Ionicons name="add" size={scale(24)} color="#FFFFFF" />
       </TouchableOpacity>
     </View>

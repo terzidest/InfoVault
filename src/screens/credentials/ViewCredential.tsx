@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, InteractionManager } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
 import useCredentialsStore from '../../store/credentialsStore';
 import { copySensitive, CLIPBOARD_CLEAR_SECONDS } from '../../services/clipboard';
+import { colors } from '../../theme/colors';
 import useSettingsStore from '../../store/settingsStore';
 import useAuth from '../../hooks/useAuth';
 import CredentialDetailItem from '../../components/features/credentials/CredentialDetailItem';
@@ -118,7 +119,7 @@ const ViewCredential: React.FC<ScreenProps<'ViewCredential'>> = ({ route, naviga
   if (!credential) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading credential...</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }

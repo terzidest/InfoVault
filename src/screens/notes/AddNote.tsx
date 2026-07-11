@@ -118,7 +118,7 @@ const AddNote: React.FC<ScreenProps<'AddNote'>> = ({ navigation, route }) => {
           onChangeText={(value) => handleChange('content', value)}
           placeholder="Enter your secure note here..."
           multiline
-          style={styles.contentInput}
+          inputStyle={styles.contentInput}
           error={!!formErrors.content}
           helperText={formErrors.content}
         />

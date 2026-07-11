@@ -208,7 +208,7 @@ const AddPersonalInfo: React.FC<ScreenProps<'AddPersonalInfo'>> = ({ navigation,
             style={styles.button}
             onPress={handleSave}
             isLoading={isLoading}
-            disabled={isLoading || !formData.title}
+            disabled={isLoading || !formData.title || !formData.type || !formData.identifier}
           >
             {isEditMode ? 'Save Changes' : 'Save Information'}
           </Button>

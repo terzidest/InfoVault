@@ -97,7 +97,12 @@ const CredentialsList: React.FC<ScreenProps<'CredentialsList'>> = ({ navigation 
         keyboardShouldPersistTaps="handled"
       />
 
-      <TouchableOpacity style={styles.addButton} onPress={handleAddCredential}>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={handleAddCredential}
+        accessibilityRole="button"
+        accessibilityLabel="Add credential"
+      >
         <Ionicons name="add" size={scale(24)} color="#FFFFFF" />
       </TouchableOpacity>
     </View>

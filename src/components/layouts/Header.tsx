@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../theme/colors';
 import type { RootStackParamList } from '../../types/navigation';
 
 interface HeaderProps {
@@ -42,8 +43,10 @@ const Header: React.FC<HeaderProps> = ({
               onPress={handleBackPress}
               className="w-10 h-10 rounded-full items-center justify-center"
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
             >
-              <Ionicons name="chevron-back" size={24} color="#FFC107" />
+              <Ionicons name="chevron-back" size={24} color={colors.secondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -68,8 +71,10 @@ const Header: React.FC<HeaderProps> = ({
               onPress={() => navigation.navigate('Settings')}
               className="w-10 h-10 rounded-full items-center justify-center"
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
             >
-              <Ionicons name="settings-outline" size={22} color="#FFC107" />
+              <Ionicons name="settings-outline" size={22} color={colors.secondary} />
             </TouchableOpacity>
           )}
         </View>
