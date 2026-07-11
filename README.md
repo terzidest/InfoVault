@@ -1,112 +1,105 @@
 # InfoVault
 
-
 <div align="center">
   <img src="src/assets/images/info-vault.png" width="300" height="600"/>
 </div>
 
-InfoVault is a secure personal information management application built with React Native and Expo. The application addresses the growing need for individuals to store sensitive personal information securely in a digital format.
+InfoVault is a local-first, secure personal information manager built with React Native and Expo. Credentials, identification documents, and private notes are encrypted on the device with a key derived from your master password — data never leaves the phone.
+
+> The full threat model — what InfoVault protects against and what it deliberately does not — lives in [SECURITY.md](SECURITY.md).
 
 ## Features
 
-### Core Features
+- **Master-password vault** — everything is encrypted client-side; the master password is never stored, and the encryption key exists only in memory while the vault is unlocked
+- **Biometric unlock** — optional fingerprint/face unlock, backed by a key held in the platform keystore behind the OS biometric gate
+- **Credentials manager** — website logins with a built-in CSPRNG password generator and strength meter
+- **Personal information vault** — passports, licenses, IDs, and other documents
+- **Secure notes** — categorized private notes
+- **Live search** — instant filtering across all three record types
 
-- **Secure Storage**: Store your sensitive information with encryption
-- **Biometric Authentication**: Access your data using fingerprint/face recognition or PIN
-- **Auto-Logout**: Automatic session termination after inactivity
-- **Credentials Manager**: Store website credentials and passwords
-- **Personal Information Vault**: Store identification numbers and personal records
-- **Secure Notes**: Create and store encrypted notes
-- **Categorization**: Organize your information by categories
+## Security
 
-### Security Measures
-
-- Local device encryption with Expo Secure Store
-- Biometric authentication integration
-- Masking of sensitive data
-- Auto-timeout for inactive sessions
-- Screenshot/recording blocking while unlocked, and an app-switcher privacy overlay
-- Clipboard auto-clear 30 seconds after copying a value
-
+- **Encryption**: whole-record AES-256-GCM (`@noble/ciphers`); keys derived with PBKDF2-SHA256 (100k iterations)
+- **Key handling**: in memory only while unlocked; locking zeroes the key and evicts all decrypted records from state
+- **Auto-lock**: idle timeout enforced continuously while the app is open and re-checked when returning from the background
+- **Screen privacy**: screenshots/recording blocked while unlocked; an opaque overlay hides content in the OS app switcher
+- **Clipboard hygiene**: copied secrets auto-clear after 30 seconds, and immediately on lock
+- **Display masking**: sensitive fields are masked by default with an auto-hiding reveal
+- **Randomness**: all security-relevant randomness comes from `expo-crypto` (CSPRNG); `Math.random()` is never used
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js (v18+)
-- npm or yarn
-
+- Node.js 18+
+- For device builds: Xcode (iOS) / Android SDK (Android)
 
 ### Installation
 
-1. Clone the repository:
-
 ```bash
-git clone https://github.com/yourusername/info-vault.git
-cd info-vault
-```
-
-2. Install dependencies:
-
-```bash
+git clone https://github.com/terzidest/InfoVault.git
+cd InfoVault
 npm install
-# or
-yarn install
 ```
 
-3. Start the Expo development server:
+### Running
 
 ```bash
-npm start
-# or
-yarn start
+npm start          # Metro dev server (works with Expo Go for most features)
+npm run ios        # build & run the iOS dev app
+npm run android    # build & run the Android dev app
 ```
 
+Native modules (secure storage, biometrics, screen-capture blocking) require a dev build — after changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
+
+### Quality checks
+
+```bash
+npm run typecheck  # strict TypeScript, no emit
+npm run lint       # ESLint, zero-warning policy
+```
+
+Both run in CI on every pull request.
 
 ## Project Structure
 
 ```
-info_vault/
-├── src/
-│   ├── assets/                   # Static assets (images, animations)
-│   ├── components/               # Reusable UI components
-│   │   ├── ui/                   # Base UI components
-│   │   ├── layouts/              # Layout components
-│   │   └── features/             # Feature-specific components
-│   ├── screens/                  # Application screens
-│   ├── store/                    # Zustand state management
-│   ├── services/                 # Core services (auth, storage)
-│   ├── utils/                    # Utility functions
-│   └── hooks/                    # Custom React hooks
-├── App.tsx                       # Application entry point
-├── babel.config.js               # Babel configuration
-├── app.json                      # Expo configuration
-└── package.json                  # Dependencies
+src/
+├── assets/          # Images and Lottie animations
+├── components/
+│   ├── ui/          # Base primitives (Input, Button, Select, ...)
+│   ├── layouts/     # Header
+│   └── features/    # Domain components + AutoLockGate (lock lifecycle)
+├── screens/         # One folder per domain + auth, settings, Home
+├── store/           # Zustand stores (auth, settings, 3 domain stores)
+├── services/        # Side-effect boundary: SecureStore, biometrics, clipboard
+├── navigation/      # Typed native stack
+├── theme/           # Color palette (source of truth for JS; mirrored in Tailwind)
+├── utils/           # Pure functions: crypto, validation, masking, formatting
+├── hooks/           # useAuth
+└── types/           # Shared models, navigation, storage types
 ```
 
 ## Technology Stack
 
-- **React Native**: Core framework for cross-platform mobile development
-- **TypeScript**: Strict, fully typed codebase
-- **Expo**: Development platform and toolchain
-- **NativeWind**: Utility-first CSS framework based on Tailwind
-- **Zustand**: Lightweight state management
-- **React Navigation**: Navigation library
-- **Expo Secure Store**: Encrypted local storage
-- **Expo Local Authentication**: Biometric authentication
-- **Lottie**: Animations library
+- **React Native + Expo** (dev builds; TypeScript strict mode)
+- **@noble/ciphers / @noble/hashes** — AES-256-GCM and PBKDF2
+- **Expo Secure Store** — platform keystore-backed storage
+- **Expo Local Authentication** — biometric gate
+- **Zustand** — state management
+- **React Navigation** (native stack)
+- **NativeWind** — Tailwind-style styling
+- **Lottie** — unlock animation
 
-## Security Best Practices
+## Roadmap
 
-- No unencrypted sensitive data in application state
-- Minimal clipboard usage for sensitive data
-- Automatic timeout-based logout
-- Secure text entry for sensitive inputs
-- Data validation for all inputs
+- Change-master-password flow (with full re-encryption and biometric key rotation)
+- Encrypted export/backup
+- Argon2id key derivation (documented upgrade path in [SECURITY.md](SECURITY.md))
+- Base64 seal encoding for larger note headroom
 
 ## Acknowledgments
 
-- Expo team for the excellent React Native toolchain
-- React Navigation for the navigation library
-- Zustand for the lightweight state management
-- Icons from Ionicons
+- Expo team for the React Native toolchain
+- Paul Miller for the noble cryptography libraries
+- React Navigation, Zustand, and Ionicons
