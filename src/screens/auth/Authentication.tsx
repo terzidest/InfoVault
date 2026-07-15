@@ -55,15 +55,25 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     return () => clearTimeout(timer);
   }, [isAuthenticated, navigation]);
 
+  // Single-flight guards: the keyboard's submit action is not disabled the
+  // way the buttons are, so both handlers re-check live store state — an
+  // unlock already in progress (e.g. the auto biometric prompt) or already
+  // completed must never start a second, concurrent attempt.
   const handleUnlock = async () => {
+    const auth = useAuthStore.getState();
+    if (!password || auth.isLoading || auth.isAuthenticated) return;
     setError(null);
     const ok = await unlockWithPassword(password);
-    if (!ok) {
+    // A late failure must not surface an error after a concurrent biometric
+    // attempt has already unlocked the vault.
+    if (!ok && !useAuthStore.getState().isAuthenticated) {
       setError('Incorrect master password');
     }
   };
 
   const handleBiometric = async () => {
+    const auth = useAuthStore.getState();
+    if (auth.isLoading || auth.isAuthenticated) return;
     setError(null);
     await unlockWithBiometrics();
   };

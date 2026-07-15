@@ -142,6 +142,19 @@ const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         authError: null,
       });
+
+      // Self-heal biometric unlock: OS biometric enrollment changes can
+      // permanently invalidate the keystore entry (biometric unlock then
+      // fails silently while the setting still claims enabled). Re-storing
+      // the key on every password unlock repairs it — writes to auth-gated
+      // entries don't prompt on either platform. Best-effort.
+      if (get().biometricEnabled) {
+        SecureStore.setItemAsync(BIOMETRIC_KEY_STORE, bytesToHex(key), {
+          requireAuthentication: true,
+          authenticationPrompt: 'Enable biometric unlock for InfoVault',
+          keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        }).catch(() => {});
+      }
       return true;
     } catch (error) {
       console.error('Unlock error', error);
