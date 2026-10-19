@@ -45,12 +45,24 @@ npm install
 ### Running
 
 ```bash
-npm start          # Metro dev server (works with Expo Go for most features)
+npm start          # Metro dev server for an installed dev build
 npm run ios        # build & run the iOS dev app
 npm run android    # build & run the Android dev app
 ```
 
-Native modules (secure storage, biometrics, screen-capture blocking) require a dev build — after changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
+The app runs as a dev build, not in Expo Go: it targets Expo SDK 52, and the store versions of Expo Go only support the latest SDK. After changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
+
+### Android preview build (shareable APK)
+
+Built in the cloud with [EAS Build](https://docs.expo.dev/build/introduction/). It needs a free Expo account but no local Android SDK:
+
+```bash
+npx eas-cli login
+npx eas-cli init                                      # first time only: links the project to your Expo account
+npx eas-cli build --platform android --profile preview
+```
+
+The build ends with an install page link and QR code. Anyone with the link can install the APK on an Android device, with "install unknown apps" allowed.
 
 ### Quality checks
 
