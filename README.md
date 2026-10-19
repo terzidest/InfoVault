@@ -8,6 +8,11 @@ InfoVault is a local-first, secure personal information manager built with React
 
 > The full threat model — what InfoVault protects against and what it deliberately does not — lives in [SECURITY.md](SECURITY.md).
 
+## Try it
+
+- **In your browser:** [live demo on Appetize](https://appetize.io/app/b_po4aou3mjf27ojws3ogxk5iytq). It's a real Android build streamed from a remote emulator, with nothing to install. It's a shared remote device, so use made-up data, not real secrets. Biometric unlock can't be shown there.
+- **On an Android phone:** [download the APK](https://github.com/terzidest/InfoVault/releases/latest/download/InfoVault.apk) and install it. You'll need to allow installs from your browser, since the app isn't on the Play Store. This is the full experience, including fingerprint unlock and screenshot blocking.
+
 ## Features
 
 - **Master-password vault** — everything is encrypted client-side; the master password is never stored, and the encryption key exists only in memory while the vault is unlocked
