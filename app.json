@@ -52,6 +52,12 @@
       "./plugins/with-fmt-xcode26-patch",
       "expo-asset",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7183a820-5f7d-4c1e-80c6-8123b5992952"
+      }
+    },
+    "owner": "terzidest"
   }
 }
