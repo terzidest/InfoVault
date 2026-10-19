@@ -19,7 +19,7 @@ InfoVault is a local-first, secure personal information manager built with React
 
 ## Security
 
-- **Encryption**: whole-record AES-256-GCM (`@noble/ciphers`); keys derived with PBKDF2-SHA256 (100k iterations)
+- **Encryption**: whole-record AES-256-GCM (`@noble/ciphers`) under a random vault key, which is wrapped by a key derived from the master password with PBKDF2-SHA256 (100k iterations); KDF parameters are stored per vault so they can be raised without re-encrypting records
 - **Key handling**: in memory only while unlocked; locking zeroes the key and evicts all decrypted records from state
 - **Auto-lock**: idle timeout enforced continuously while the app is open and re-checked when returning from the background
 - **Screen privacy**: screenshots/recording blocked while unlocked; an opaque overlay hides content in the OS app switcher
@@ -93,9 +93,9 @@ src/
 
 ## Roadmap
 
-- Change-master-password flow (with full re-encryption and biometric key rotation)
+- Change-master-password flow (re-wraps the vault key; records are untouched)
 - Encrypted export/backup
-- Argon2id key derivation (documented upgrade path in [SECURITY.md](SECURITY.md))
+- Argon2id as the default KDF — supported by the vault format, pending on-device latency measurement (see [SECURITY.md](SECURITY.md))
 - Base64 seal encoding for larger note headroom
 
 ## Acknowledgments
