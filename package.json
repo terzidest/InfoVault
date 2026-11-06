@@ -8,7 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "test": "jest"
   },
   "dependencies": {
     "@noble/ciphers": "^2.2.0",
@@ -28,6 +29,8 @@
     "expo-screen-capture": "~7.0.1",
     "expo-secure-store": "~14.0.1",
     "expo-status-bar": "~2.0.1",
+    "jest": "^29.7.0",
+    "jest-expo": "~52.0.6",
     "lottie-react-native": "7.1.0",
     "metro": "^0.81.0",
     "nativewind": "4.1.23",
@@ -47,6 +50,7 @@
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.25.9",
     "@babel/preset-typescript": "^7.26.0",
+    "@types/jest": "^29.5.14",
     "babel-preset-expo": "~12.0.0",
     "eslint": "^8.57.1",
     "eslint-config-expo": "~8.0.1",

@@ -26,3 +26,6 @@ jobs:
 
       - name: Lint
         run: npx eslint . --ext .js,.jsx,.ts,.tsx --max-warnings 0
+
+      - name: Test
+        run: npm test -- --ci
