@@ -2,7 +2,7 @@
 
 Local-first secure personal information manager (passwords, IDs, notes). React Native + Expo. Data never leaves the device.
 
-> Finalization roadmap lives in `INFOVAULT_FINALIZATION_SPEC.md`. Threat model lives in `SECURITY.md`. Read those before large changes to auth or storage.
+> The v2 roadmap (record model, screens, features, platform upgrade, sequence) lives in `INFOVAULT_V2_SPEC.md`; the target design (stack, layers, key hierarchy, flows, decisions) in `ARCHITECTURE.md`. Threat model lives in `SECURITY.md`. Read those before large changes to auth or storage.
 
 ## Commands
 

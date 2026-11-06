@@ -8,6 +8,11 @@ InfoVault is a local-first, secure personal information manager built with React
 
 > The full threat model — what InfoVault protects against and what it deliberately does not — lives in [SECURITY.md](SECURITY.md).
 
+## Try it
+
+- **In your browser:** [live demo on Appetize](https://appetize.io/app/b_po4aou3mjf27ojws3ogxk5iytq). It's a real Android build streamed from a remote emulator, with nothing to install. It's a shared remote device, so use made-up data, not real secrets. Biometric unlock can't be shown there.
+- **On an Android phone:** [download the APK](https://github.com/terzidest/InfoVault/releases/latest/download/InfoVault.apk) and install it. You'll need to allow installs from your browser, since the app isn't on the Play Store. This is the full experience, including fingerprint unlock and screenshot blocking.
+
 ## Features
 
 - **Master-password vault** — everything is encrypted client-side; the master password is never stored, and the encryption key exists only in memory while the vault is unlocked
@@ -45,12 +50,24 @@ npm install
 ### Running
 
 ```bash
-npm start          # Metro dev server (works with Expo Go for most features)
+npm start          # Metro dev server for an installed dev build
 npm run ios        # build & run the iOS dev app
 npm run android    # build & run the Android dev app
 ```
 
-Native modules (secure storage, biometrics, screen-capture blocking) require a dev build — after changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
+The app runs as a dev build, not in Expo Go: it targets Expo SDK 52, and the store versions of Expo Go only support the latest SDK. After changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
+
+### Android preview build (shareable APK)
+
+Built in the cloud with [EAS Build](https://docs.expo.dev/build/introduction/). It needs a free Expo account but no local Android SDK:
+
+```bash
+npx eas-cli login
+npx eas-cli init                                      # first time only: links the project to your Expo account
+npx eas-cli build --platform android --profile preview
+```
+
+The build ends with an install page link and QR code. Anyone with the link can install the APK on an Android device, with "install unknown apps" allowed.
 
 ### Quality checks
 
