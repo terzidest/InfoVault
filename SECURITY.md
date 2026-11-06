@@ -10,7 +10,7 @@ InfoVault is a local-first manager for sensitive personal information: account c
 
 - **Casual access to an unlocked device.** Sensitive fields are masked by default in the UI and require an explicit reveal, which auto-hides after a short timeout.
 - **Screenshots, screen recording, and app-switcher snapshots.** While the vault is unlocked, screen capture is blocked (`FLAG_SECURE` on Android; capture/recording protection on iOS), and an opaque overlay covers the UI whenever the app leaves the foreground so OS task-switcher snapshots never contain vault content. Capture by a compromised OS remains out of scope (below).
-- **Loss or theft of a device with the vault locked.** Records are stored as AES-256-GCM ciphertext. Without the key — which is derived from the user's master password and is not stored in plaintext — the stored data is opaque. An attacker with the raw storage contents sees ciphertext, salt, and a verifier, none of which reveal the data or the password.
+- **Loss or theft of a device with the vault locked.** Records are stored as AES-256-GCM ciphertext. Without the vault key — which is stored only wrapped under a key derived from the user's master password — the stored data is opaque. An attacker with the raw storage contents sees ciphertext and the vault header (KDF parameters, salt, wrapped key), none of which reveal the data or the password without a successful password guess.
 - **Reading raw storage.** Even with full read access to the app's `SecureStore` entries (e.g. via a backup or forensic dump on a non-hardened device), records cannot be decrypted without the master password.
 - **Idle exposure.** An auto-lock timeout locks the vault after inactivity — evaluated continuously while the app is foregrounded and again when it returns from the background — clearing the in-memory key and decrypted records and requiring re-authentication.
 
@@ -32,16 +32,26 @@ Stated plainly so there are no false assumptions:
 - **Granularity:** whole-record encryption. The entire record is serialized and encrypted as one unit, so no field-level metadata (titles, dates, types) is left in plaintext. Search operates over records *after* they are decrypted into memory, so encryption does not impair it.
 - **Authentication:** the GCM tag detects tampering; a modified ciphertext fails to decrypt rather than returning corrupted data.
 
+### Key hierarchy
+- **Vault key:** a random 256-bit key (from `expo-crypto`) encrypts every record. It never changes when the password or KDF changes.
+- **Wrapping key:** derived from the master password and a random salt. It encrypts only the vault key (AES-256-GCM, with associated data that separates it from record encryption).
+- **Vault header:** a single `SecureStore` entry holding the format version, the KDF algorithm and parameters, the salt, and the wrapped vault key. It is written in one call, so it is never half-updated. None of it is secret.
+- **Password check:** unwrapping the vault key is the password check. A wrong password fails the GCM tag, so no separate verifier is stored.
+- **Why this shape:** raising the KDF cost, switching KDF, or (later) changing the master password re-wraps 32 bytes instead of re-encrypting every record. When a vault's stored KDF parameters are older than the app's current ones, the vault key is re-wrapped automatically on the next password unlock.
+
 ### Key derivation
-- **Current:** the AES-256 key is derived from the master password and a per-install random salt using **PBKDF2-SHA256 at 100,000 iterations** (via [`@noble/hashes`](https://github.com/paulmillr/noble-hashes)). The salt defeats precomputed (rainbow-table) attacks; the iteration count adds work to each guess.
-- **Known limitation:** PBKDF2 is not memory-hard, so it is more vulnerable to GPU/ASIC-accelerated offline cracking than a memory-hard function. The iteration count is also a latency/security tradeoff tuned for acceptable unlock time in pure JS.
-- **Upgrade path:** the derivation is isolated in `utils/crypto.ts` behind a single `deriveKey` function. Replacing it with **Argon2id** (memory-hard, current best practice — also available in `@noble/hashes`) hardens the vault against offline brute-force without changing the rest of the system.
+- **Current:** **PBKDF2-SHA256 at 100,000 iterations** (via [`@noble/hashes`](https://github.com/paulmillr/noble-hashes)). The salt defeats precomputed (rainbow-table) attacks; the iteration count adds work to each guess.
+- **Known limitation:** PBKDF2 is not memory-hard, so it is more vulnerable to GPU/ASIC-accelerated offline cracking than a memory-hard function. 100k iterations is also below OWASP's current PBKDF2-SHA256 recommendation (600k), which is too slow for pure JS on Hermes, the JS engine without a JIT that the app runs on.
+- **Upgrade path:** `deriveKey` already supports **Argon2id** (memory-hard, OWASP's first choice; minimum 19 MiB, 2 passes, parallelism 1), and the header format records it. Making it the default is a change to `CURRENT_KDF` in `utils/crypto.ts`. It waits on measuring unlock latency on a low-end device: if pure-JS Argon2id is too slow on Hermes, a native implementation comes first.
+
+### Migration from the pre-header format
+Vaults created before the header existed stored a salt and a verifier, and used the PBKDF2-derived key directly for records. On the first successful password unlock after upgrading, that derived key becomes the vault key and is wrapped under a fresh key, derived with a new salt. The old salt and verifier are then deleted. Records and the biometric keystore copy stay valid with no re-encryption. Until the header is written, the old entries still open the vault, so an interrupted migration simply retries. Tradeoff: for these migrated vaults the vault key is password-derived rather than random. That is harmless once the old salt is gone, because the key is only useful to an attacker who can brute-force a 256-bit value. A future change-password flow can rotate to a fresh random key.
 
 ### Key handling
-- The derived key exists **in memory only** during an unlocked session.
-- It is **never** written to storage in plaintext, never logged, never placed in AsyncStorage or any persisted state slice.
-- For biometric convenience unlock, a copy of the key may be stored in the platform keystore (`SecureStore`) gated behind the OS biometric prompt — so it is released only on a successful biometric check.
-- The master password itself is never stored. Correctness is checked against a **verifier** (a known sentinel value encrypted under the derived key); decrypting the sentinel confirms the password without storing it or a recoverable hash of it.
+- The vault key exists **in memory only** during an unlocked session. The wrapping key is zeroed as soon as the vault key is unwrapped.
+- Neither is **ever** written to storage in plaintext, logged, or placed in AsyncStorage or any persisted state slice. The vault key is persisted only in wrapped form.
+- For biometric convenience unlock, a copy of the vault key may be stored in the platform keystore (`SecureStore`) gated behind the OS biometric prompt — so it is released only on a successful biometric check.
+- The master password itself is never stored, nor is any hash of it. It is checked by unwrapping the vault key (see Key hierarchy).
 - On logout and on auto-lock, the in-memory key bytes are zeroed and the reference dropped, and all decrypted records are evicted from in-memory state — locking leaves no plaintext behind.
 
 ### Randomness
@@ -57,4 +67,4 @@ This is a portfolio / personal project. If you find an issue, open an issue in t
 
 ---
 
-*Last reviewed: keep this date current when the crypto layer changes. This document and the README's security section must stay in sync with the actual implementation — if the code's behavior changes, update both in the same change.*
+*Last reviewed: 2026-10-19. Keep this date current when the crypto layer changes. This document and the README's security section must stay in sync with the actual implementation — if the code's behavior changes, update both in the same change.*

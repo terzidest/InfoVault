@@ -1,7 +1,20 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { bytesToHex, hexToBytes } from '@noble/ciphers/utils';
-import { generateSalt, deriveKey, makeVerifier, verifyKey } from '../utils/crypto';
+import {
+  CURRENT_KDF,
+  LEGACY_KDF,
+  deriveKey,
+  generateSalt,
+  generateVaultKey,
+  isSameKdf,
+  parseVaultHeader,
+  serializeVaultHeader,
+  unwrapVaultKey,
+  verifyKey,
+  wrapVaultKey,
+} from '../utils/crypto';
+import type { VaultHeader } from '../utils/crypto';
 import { wipeAllRecords } from '../services/secureStorage';
 import { checkAuthenticationTypes } from '../services/authentication';
 import { clearSensitiveClipboard } from '../services/clipboard';
@@ -16,10 +29,84 @@ import usePersonalInfoStore from './personalInfoStore';
 let lastActivityAt = Date.now();
 
 const SETUP_KEY = 'setupComplete';
-const SALT_KEY = 'vaultSalt';
-const VERIFIER_KEY = 'vaultVerifier';
+const HEADER_KEY = 'vaultHeader';
+// Legacy (pre-header) vaults: the password-derived key encrypted records
+// directly and was checked against a verifier. Migrated on password unlock.
+const LEGACY_SALT_KEY = 'vaultSalt';
+const LEGACY_VERIFIER_KEY = 'vaultVerifier';
 const BIOMETRIC_KEY_STORE = 'vaultBiometricKey';
 const BIOMETRIC_ENABLED_KEY = 'vaultBiometricEnabled';
+
+// Seals the vault key under a key derived with CURRENT_KDF and a fresh salt.
+// The fresh salt matters for migrated legacy vaults: their vault key IS the
+// old derived key, so reusing the old salt would wrap the key under itself.
+const writeHeader = async (password: string, vaultKey: Uint8Array): Promise<void> => {
+  const salt = await generateSalt();
+  const wrappingKey = await deriveKey(password, salt, CURRENT_KDF);
+  try {
+    const header: VaultHeader = {
+      version: 2,
+      kdf: CURRENT_KDF,
+      salt,
+      wrappedKey: await wrapVaultKey(vaultKey, wrappingKey),
+    };
+    await SecureStore.setItemAsync(HEADER_KEY, serializeVaultHeader(header));
+  } finally {
+    wrappingKey.fill(0);
+  }
+};
+
+const deleteLegacyEntries = async (): Promise<void> => {
+  await SecureStore.deleteItemAsync(LEGACY_SALT_KEY);
+  await SecureStore.deleteItemAsync(LEGACY_VERIFIER_KEY);
+};
+
+type OpenVaultResult =
+  | { status: 'unlocked'; vaultKey: Uint8Array }
+  | { status: 'wrong-password' }
+  | { status: 'not-set-up' };
+
+const openVault = async (password: string): Promise<OpenVaultResult> => {
+  const rawHeader = await SecureStore.getItemAsync(HEADER_KEY);
+  if (rawHeader) {
+    const header = parseVaultHeader(rawHeader);
+    const wrappingKey = await deriveKey(password, header.salt, header.kdf);
+    const vaultKey = unwrapVaultKey(header.wrappedKey, wrappingKey);
+    wrappingKey.fill(0);
+    if (!vaultKey) return { status: 'wrong-password' };
+
+    // KDF upgrade: re-wrap under the current parameters. Only the 32-byte
+    // vault key changes hands — records are untouched. Best-effort: the old
+    // header still opens the vault, so a failure just retries next unlock.
+    if (!isSameKdf(header.kdf, CURRENT_KDF)) {
+      await writeHeader(password, vaultKey).catch(() => {});
+    }
+    return { status: 'unlocked', vaultKey };
+  }
+
+  const salt = await SecureStore.getItemAsync(LEGACY_SALT_KEY);
+  const verifier = await SecureStore.getItemAsync(LEGACY_VERIFIER_KEY);
+  if (!salt || !verifier) return { status: 'not-set-up' };
+
+  const legacyKey = await deriveKey(password, salt, LEGACY_KDF);
+  if (!verifyKey(verifier, legacyKey)) {
+    legacyKey.fill(0);
+    return { status: 'wrong-password' };
+  }
+
+  // Migrate: the legacy key becomes the vault key, so every record and the
+  // biometric keystore copy stay valid with no re-encryption. The header is
+  // one atomic write and takes precedence once present; until it lands the
+  // legacy entries still open the vault, so a failure just retries next
+  // unlock.
+  try {
+    await writeHeader(password, legacyKey);
+    await deleteLegacyEntries();
+  } catch {
+    // Best-effort; see above.
+  }
+  return { status: 'unlocked', vaultKey: legacyKey };
+};
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -93,12 +180,9 @@ const useAuthStore = create<AuthState>((set, get) => ({
   setupMasterPassword: async (password) => {
     set({ isLoading: true, authError: null });
     try {
-      const salt = await generateSalt();
-      const key = await deriveKey(password, salt);
-      const verifier = await makeVerifier(key);
-
-      await SecureStore.setItemAsync(SALT_KEY, salt);
-      await SecureStore.setItemAsync(VERIFIER_KEY, verifier);
+      const key = await generateVaultKey();
+      await writeHeader(password, key);
+      await deleteLegacyEntries();
 
       // Fresh encrypted vault: clear any pre-existing plaintext test records.
       await wipeAllRecords();
@@ -122,18 +206,16 @@ const useAuthStore = create<AuthState>((set, get) => ({
   unlockWithPassword: async (password) => {
     set({ isLoading: true, authError: null });
     try {
-      const salt = await SecureStore.getItemAsync(SALT_KEY);
-      const verifier = await SecureStore.getItemAsync(VERIFIER_KEY);
-      if (!salt || !verifier) {
+      const result = await openVault(password);
+      if (result.status === 'not-set-up') {
         set({ authError: 'Vault is not set up', isLoading: false });
         return false;
       }
-
-      const key = await deriveKey(password, salt);
-      if (!verifyKey(verifier, key)) {
+      if (result.status === 'wrong-password') {
         set({ authError: 'Incorrect master password', isLoading: false });
         return false;
       }
+      const key = result.vaultKey;
 
       lastActivityAt = Date.now();
       set({
