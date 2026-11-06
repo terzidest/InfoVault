@@ -62,7 +62,21 @@ Runs once, on the first unlock after update, same pattern as the vault-header mi
 - `Note` → Note: content; `category` → a tag.
 
 ### Storage
-Unchanged: whole-record AES‑256‑GCM through `services/secureStorage.ts`, one `SecureStore` entry per record plus one key registry (`recordKeys`). SecureStore's per-entry size limit (~2 KB on Android) stays the practical cap on a single record; the add screen enforces it the way the note cap does today.
+**One encrypted vault file, not one SecureStore entry per record.** v1 uses SecureStore as a database: a keychain entry per record plus a JSON key registry. That costs a ~2 KB cap per value (halved by hex encoding, so ~1 KB of plaintext per record), one native round-trip per record at every unlock, and non-atomic record+registry writes. SecureStore's own encryption adds nothing on top of ours. It is the right place for small secrets and the wrong place for records.
+
+v2 splits storage by what each store is for:
+
+| Where | What | Why |
+|---|---|---|
+| `SecureStore` | vault header (KDF params, salt, wrapped vault key); biometric-gated copy of the vault key | small secrets; the biometric copy needs the auth-gated keystore |
+| App document directory (`expo-file-system`) | `vault.bin`: the whole record set, serialized and sealed as one AES‑256‑GCM blob under the vault key | no size cap, one read at unlock, one atomic write per change |
+
+- **Read:** at unlock, read the file, decrypt once, hold records in memory in the store (v1 already holds everything in memory).
+- **Write:** on any change, serialize all records, seal with a fresh random nonce, write to a temp file, rename over `vault.bin`. A crash mid-write leaves the previous file intact. A few hundred records is tens of KB; pure-JS AES‑GCM on that is milliseconds.
+- **Encoding:** binary file with a small header; no hex. Seal format is versioned so it can change.
+- **Export is the same format.** The export file = vault header + sealed blob. Export writes it to the share sheet; import reads it, derives the wrapping key from the password with the KDF params in its header, unwraps, decrypts, merges. One serializer for on-device storage and backup.
+- **Reinstall on iOS:** Keychain entries survive app uninstall, the document directory does not. `init()` must treat "header present, `vault.bin` missing" as a fresh install (clear the stale header and biometric key), not as a corrupt vault.
+- **`services/secureStorage.ts`** becomes `services/vaultFile.ts` (read/write the sealed file) and the header/biometric helpers stay in `authStore`. Records never touch SecureStore.
 
 ---
 
@@ -76,7 +90,7 @@ Designed in Claude Design; this lists what each screen must do, not how it looks
 - **Add / Edit** — one screen. Picking a template seeds the fields. Each field row is label + value + kind; fields can be added, removed, reordered. The password generator attaches to any `secret` field.
 - **Settings** — auto-lock, biometrics, theme, **change master password**, **export / import**, lock now.
 
-**Styling:** one paradigm across the app (decided during the rebuild; today NativeWind and StyleSheet + `size-matters` are mixed per file). Colors, spacing and type come from one theme module; light and dark both supported.
+**Styling:** `StyleSheet` + a theme module, nothing else. NativeWind and `react-native-size-matters` are removed during the rebuild (v1 mixes both paradigms per file, and NativeWind's css-interop is what broke Metro once and forced the version pin). The theme module holds the tokens Claude Design produces — colors, spacing, type scale, radii — for light and dark; screens read them through a `useTheme()` hook. Zero styling dependencies means nothing to break on the next SDK bump.
 
 ---
 
@@ -104,15 +118,18 @@ Designed in Claude Design; this lists what each screen must do, not how it looks
 
 - Expo SDK 52 → current (58 at time of writing), **New Architecture on**. Known fallout: Reanimated 3 → 4 (4 requires New Arch), React Navigation 6 → 7, NativeWind off the 4.1.23 pin, drop `plugins/with-fmt-xcode26-patch.js` (RN 0.76-only workaround). Follow the lockfile procedure in CLAUDE.md.
 - Done on the v1 app first, behaviour unchanged, merged with green CI, before any v2 UI work. One unknown at a time.
-- Unblocks `react-native-quick-crypto`, which gives PR #28 native Argon2id instead of pure JS on Hermes. Decide the KDF switch after the upgrade, with on-device timings.
+- Unblocks `react-native-quick-crypto`, used for **Argon2id only**. AES‑GCM stays on `@noble/ciphers` (audited, pure, per-write cost is tiny) and randomness on `expo-crypto`. With native Argon2id the parameters can be real ones (64 MiB, t=3, p=1) rather than the OWASP floor; confirm with on-device timing.
+- **Navigation:** React Navigation 7, native stack. Not Expo Router — file routing and deep links add nothing to five screens, and URL-openable screens are an anti-feature in a vault.
+- **`android:allowBackup` → false** via `expo-build-properties`. Android auto-backup can copy app data to Google Drive; the vault file would be ciphertext, but "data never leaves the device" should be literally true. Part of the upgrade PR.
+- **Test runner:** add Jest in the upgrade PR, with the harness pattern used to verify the vault-header migration (real stores + crypto, stubbed SecureStore and file system). The v2 record migration, vault file read/write, and export/import are the first suites; CI runs them.
 
 ---
 
 ## 5. Sequence
 
-1. **SDK + New Arch upgrade** on v1 (branch, PR, CI green, APK rebuilt and smoke-tested).
-2. **Design** in Claude Design, in parallel with 1: Unlock, Home, Record, Add/Edit, Settings, light + dark.
-3. **Model + migration**: new `types/models.ts`, single `recordsStore`, migration on unlock, v1 stores deleted. Tested with the Node harness pattern used for the vault-header migration (real store + crypto, stubbed SecureStore).
+1. **SDK + New Arch upgrade** on v1 (branch, PR, CI green, APK rebuilt and smoke-tested). Includes Jest, `allowBackup=false`, and removing the fmt plugin.
+2. **Design** in Claude Design, in parallel with 1: Unlock, Home, Record, Add/Edit, Settings, light + dark. Output: screens plus the token set for the theme module.
+3. **Model + storage + migration**: new `types/models.ts`, single `recordsStore`, `services/vaultFile.ts`, migration on unlock (v1 SecureStore records → v2 vault file, then v1 entries deleted), v1 stores deleted. Jest-tested.
 4. **Screens**, one at a time against the design: Home, Record, Add/Edit, Settings, Unlock. Old screens deleted as each new one lands.
 5. **Export / import**, then **change master password** (after PR #28 merges).
 6. Release v2: EAS preview APK, GitHub release, Appetize upload, README + SECURITY.md updated in the same change.
