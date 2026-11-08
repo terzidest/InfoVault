@@ -59,7 +59,28 @@ All security-relevant randomness (salts, identifiers, GCM nonces) comes from `ex
 
 ## Storage
 
-`expo-secure-store` is the persistence layer, backed by the iOS Keychain and Android Keystore. InfoVault layers its own application-level AES-GCM encryption on top of this, so the data is protected both by the platform keystore and by the master-password-derived key — meaning raw access to keystore contents alone does not yield plaintext.
+`expo-secure-store` (iOS Keychain / Android Keystore) is the persistence layer of the shipped app. It holds:
+
+| Entry | What | Protection |
+| --- | --- | --- |
+| `vaultHeader` | KDF algorithm and parameters, salt, the wrapped vault key | Platform keystore; not secret, readable before unlock |
+| `vaultBiometricKey` (optional) | A copy of the vault key, released only after the OS biometric prompt | Auth-gated keystore entry |
+| One entry per record, plus a JSON id registry per type (`credentialKeys`, `noteKeys`, `personalInfoKeys`) | Each record sealed with AES-256-GCM under the vault key (`encryptRecord`) | Platform keystore *and* the application-level cipher — raw access to keystore contents alone does not yield plaintext |
+
+### Planned at the v2 cutover (PR 10)
+
+The storage below is implemented and tested in the codebase (`utils/vaultFormat.ts`, `services/vaultFile.ts`, `services/migrateV1.ts`, `store/recordsStore.ts`) but is not yet wired into unlock. Once it is, records never touch SecureStore and SecureStore never holds record data:
+
+| Where | What | Protection |
+| --- | --- | --- |
+| `SecureStore` | The vault header and, when biometric unlock is on, the gated copy of the vault key — as today | As today |
+| `vault.bin` in the app's document directory | Every record, serialized as one JSON payload and sealed as a single AES-256-GCM blob under the vault key | Application-level AES-256-GCM; copying the file off the device yields ciphertext only |
+
+The vault file is a small binary container: a magic number and format version, a short plaintext JSON header, a fresh 96-bit nonce per write, and the ciphertext with its GCM tag. The header is passed to GCM as associated data, so it is authenticated even though it is not encrypted — editing it fails decryption. Writes are serialized and lock-checked (a vault that locked while sealing is never written): every change seals the full record set, writes it to a temporary file, moves the current `vault.bin` aside as `vault.bin.bak`, moves the new file into place and then drops the backup. An interruption at any point leaves a complete, decodable file on disk, and the next read or write restores the last *acknowledged* vault: `vault.bin`, or `vault.bin.bak` when the primary is missing or undecodable and the backup decodes. The temporary file is never treated as the vault, since the change it holds was reported to its caller as failed. The on-disk format is also the export format, with the header carrying the KDF parameters, salt and wrapped key instead.
+
+**Device backups.** On iOS, `vault.bin` lives in the app's Documents directory and may be included in iCloud and Finder backups. That is deliberate: the file is ciphertext under a key that is never backed up in plaintext (the header holds it only wrapped under the password-derived key; the biometric copy is a device-only keystore entry that does not transfer), so a backup exposes nothing — and it is what lets a device restore bring the vault back together with the Keychain header. On Android the app opts out of backups entirely (`allowBackup=false`), so the vault file never leaves the device.
+
+v1 records are migrated on the first unlock after the cutover, and on every unlock after that until nothing v1 is left: each entry is decrypted with the vault key, its fields normalized, mapped to a v2 record, checked against the record schema and written to `vault.bin`; only after that write succeeds are the v1 entries deleted. An entry that cannot be decrypted or converted is left in place (its registry keeps listing it) and a registry that cannot be parsed is left untouched with everything it names, so both are retried on later unlocks. Cleanup after a successful write is best-effort; anything it misses is migrated again, except that a record the user has since deleted in v2 is recognised (the vault remembers every migrated v1 id) and is not resurrected. An unexpected failure before the write (a storage read failing) aborts the pass with nothing deleted, and the app still opens the existing vault.
 
 ## Reporting
 
@@ -67,4 +88,4 @@ This is a portfolio / personal project. If you find an issue, open an issue in t
 
 ---
 
-*Last reviewed: 2026-10-19. Keep this date current when the crypto layer changes. This document and the README's security section must stay in sync with the actual implementation — if the code's behavior changes, update both in the same change.*
+*Last reviewed: 2026-11-08. Keep this date current when the crypto layer changes. This document and the README's security section must stay in sync with the actual implementation — if the code's behavior changes, update both in the same change.*

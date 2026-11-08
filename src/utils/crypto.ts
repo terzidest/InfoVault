@@ -123,13 +123,13 @@ export const unwrapVaultKey = (wrapped: string, wrappingKey: Uint8Array): Uint8A
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isPositiveInt = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value > 0;
 
-const parseKdfParams = (value: unknown): KdfParams => {
+export const parseKdfParams = (value: unknown): KdfParams => {
   if (isRecord(value)) {
     if (value.alg === 'pbkdf2-sha256' && isPositiveInt(value.iterations)) {
       return { alg: value.alg, iterations: value.iterations };
