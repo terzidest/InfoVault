@@ -101,7 +101,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
         >
           <Ionicons name="time-outline" size={18} color={tokens.colors.amberText} />
           <Secondary style={[styles.noticeText, { marginLeft: tokens.spacing.sm }]}>
-            Some records are still being upgraded. They&apos;ll appear after the next unlock.
+            Some records are still being upgraded or could not be read yet. They&apos;ll be retried on the next unlock.
           </Secondary>
         </View>
       ) : null}

@@ -184,7 +184,7 @@ Every change rewrites the whole vault file atomically; the backup file is that s
 1. The header migration already exists ([PR #28](https://github.com/terzidest/InfoVault/pull/28)): the v1 salt and verifier become a header, and the v1 password-derived key becomes the vault key, so nothing is re-encrypted.
 2. Each v1 record is read from SecureStore, decrypted with the vault key and mapped: `Credential` → Login, `PersonalInfo` → ID document (or ID number when only the identifier is set), `Note` → Note with its category as a tag.
 3. `vault.bin` is written. Only then are the v1 entries and their key registries deleted. An interruption before that point leaves v1 intact and the migration retries next unlock.
-4. iOS keeps Keychain entries across an uninstall. Key material (header, legacy salt or setup flag) with no `vault.bin` (nor a `.bak`) and no v1 entries means a fresh install or an interrupted setup: the header, legacy entries, biometric copy and setup flag are cleared and setup runs. Setup also removes any stale vault file before writing the new empty one.
+4. iOS keeps Keychain entries across an uninstall. A header with no `vault.bin` (nor a `.bak`) and no v1 entries means a fresh install or an interrupted setup: `init()` routes to Setup and deletes nothing. Setup clears the header, legacy entries, biometric copy, setup flag and any stale vault file itself — after re-checking that no header-plus-file vault exists, in which case it refuses and the next launch unlocks normally. A pre-header v1 vault (salt + verifier) always unlocks; that unlock writes the header and an empty file.
 
 ## Decisions
 

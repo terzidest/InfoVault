@@ -329,6 +329,7 @@ describe('init', () => {
     expect(useAuthStore.getState().needsSetup).toBe(true);
     secureStoreMock.__store.set(SETUP_KEY, 'true');
     secureStoreMock.__store.set(BIOMETRIC_ENABLED_KEY, 'true');
+    secureStoreMock.__store.set(HEADER_KEY, '{"version":2}');
     fsMock.__files.set(VAULT, new Uint8Array([1])); // a vault is on disk, so this is not a reinstall
     await useAuthStore.getState().init();
     expect(useAuthStore.getState().needsSetup).toBe(false);

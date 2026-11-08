@@ -29,14 +29,16 @@ export interface RecordsState {
   error: string | null;
   // True once open() has populated `records` for the current unlock.
   isOpen: boolean;
-  // True when the last open() could not run the v1 migration (it threw) and so
-  // v1 entries may still be waiting. Cleared by the next open() whose pass
-  // completes. Home shows a notice while it is set.
+  // True when the last open() left v1 entries behind: the migration threw, or
+  // it could not convert some entries (skipped). Cleared by the next open()
+  // whose pass completes with nothing left over. Home shows a notice while set.
   migrationPending: boolean;
-  // Loads the vault under the key authStore currently holds. Resolves true
-  // when the records were published, false when the open was abandoned
-  // because the vault locked or was cleared meanwhile (not an error).
-  open: () => Promise<boolean>;
+  // Loads the vault under the key authStore currently holds. `hasLegacyData`
+  // is init()'s registry probe: when false the v1 migration is skipped
+  // entirely (no second probe). Resolves true when the records were
+  // published, false when the open was abandoned because the vault locked or
+  // was cleared meanwhile (not an error).
+  open: (hasLegacyData?: boolean) => Promise<boolean>;
   add: (input: VaultRecordInput) => Promise<VaultRecord>;
   update: (id: string, patch: Partial<VaultRecordInput>) => Promise<VaultRecord>;
   remove: (id: string) => Promise<boolean>;
@@ -143,7 +145,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
     isOpen: false,
     migrationPending: false,
 
-    open: () =>
+    open: (hasLegacyData = true) =>
       enqueue(async () => {
         // Start from nothing: whatever an earlier open left behind is stale,
         // and a task from before this point must not publish into this one.
@@ -155,14 +157,17 @@ const useRecordsStore = create<RecordsState>((set, get) => {
         ops.begin(set);
         try {
           key = requireKey();
-          // Always runs: it is one registry probe when there is nothing to
-          // migrate, and it retries entries an earlier pass had to leave
-          // behind. It writes vault.bin itself when it migrates anything.
-          const migration = await migrateV1(key, isLiveKey).catch((error: unknown) => {
-            // v1 stays put for the next unlock; the existing vault still loads.
-            console.warn('v1 migration failed; will retry on the next unlock', error instanceof Error ? error.name : '');
-            return null;
-          });
+          // Runs whenever init() saw v1 registries, so entries an earlier pass
+          // had to leave behind are retried. It writes vault.bin itself when
+          // it migrates anything. `null` = it threw; v1 stays for next time.
+          const migration = hasLegacyData
+            ? await migrateV1(key, isLiveKey).catch((error: unknown) => {
+                // v1 stays put for the next unlock; the existing vault still loads.
+                console.warn('v1 migration failed; will retry on the next unlock', error instanceof Error ? error.name : '');
+                return null;
+              })
+            : undefined;
+          const migrationPending = migration === null || (migration !== undefined && migration.skipped > 0);
           // readVaultPayload also recovers a vault whose last commit was
           // interrupted — never gate on vaultExists for the read.
           const stored = migration?.hadV1 ? migration : await readVaultPayload(key);
@@ -177,7 +182,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
             await writeVault({ records, migratedV1Ids }, key, isLiveKey);
             if (!isCurrent(key, gen)) return false;
           }
-          set({ records, isOpen: true, migrationPending: migration === null });
+          set({ records, isOpen: true, migrationPending });
           return true;
         } catch (error) {
           // Locked or cleared mid-open: the lock zeroed the key, so the read

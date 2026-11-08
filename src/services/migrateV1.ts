@@ -1,8 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { decryptRecord, generateSecureId, isRecord } from '../utils/crypto';
 import { fromV1Credential, fromV1Note, fromV1PersonalInfo, timestamp } from '../utils/records';
-import { isStringArray, isVaultRecord } from '../utils/vaultFormat';
-import { STORAGE_TYPES, registryKey } from './legacyVault';
+import { isVaultRecord } from '../utils/vaultFormat';
+import { parseRegistry, readRegistries, registryKey } from './legacyVault';
 import type { StorageType } from './legacyVault';
 import { readVaultPayload, writeVault } from './vaultFile';
 import type { IsKeyLive } from './vaultFile';
@@ -43,32 +43,7 @@ export interface MigrationResult {
   migratedV1Ids: string[];
 }
 
-interface Registry {
-  type: StorageType;
-  raw: string;
-}
-
-// One parallel read of the three registries; the only probe there is.
-const readRegistries = async (): Promise<Registry[]> => {
-  const raws = await Promise.all(STORAGE_TYPES.map((type) => SecureStore.getItemAsync(registryKey(type))));
-  const found: Registry[] = [];
-  STORAGE_TYPES.forEach((type, i) => {
-    const raw = raws[i];
-    if (raw !== null && raw !== undefined) found.push({ type, raw });
-  });
-  return found;
-};
-
 export const hasV1Data = async (): Promise<boolean> => (await readRegistries()).length > 0;
-
-const parseRegistry = (raw: string): string[] | null => {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return isStringArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
 
 // ---------------------------------------------------------------------------
 // v1 shape normalization

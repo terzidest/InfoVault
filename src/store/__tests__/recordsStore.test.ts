@@ -78,6 +78,18 @@ describe('open', () => {
     expect(fsMock.__files.get(VAULT)).toBe(bytes);
   });
 
+  it('open(false) skips the migration entirely: no registry probe, v1 entries untouched', async () => {
+    const key = await unlockWith();
+    secureStoreMock.__store.set('c1', await encryptRecord({ id: 'c1', title: 'Bank', createdAt: 't', updatedAt: 't' }, key));
+    secureStoreMock.__store.set('credentialKeys', JSON.stringify(['c1']));
+    const probe = jest.spyOn(SecureStore, 'getItemAsync');
+    expect(await useRecordsStore.getState().open(false)).toBe(true);
+    expect(probe).not.toHaveBeenCalled();
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().migrationPending).toBe(false);
+    expect(secureStoreMock.__store.has('c1')).toBe(true);
+  });
+
   it('loads an existing vault file', async () => {
     const key = await unlockWith();
     const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
@@ -120,6 +132,7 @@ describe('open', () => {
     secureStoreMock.__store.set('credentialKeys', JSON.stringify(['c1']));
     await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().migrationPending).toBe(true); // skipped, not thrown
     expect(secureStoreMock.__store.has('c1')).toBe(true);
     const a = await useRecordsStore.getState().add(loginInput('A'));
     useRecordsStore.getState().clear();
@@ -127,6 +140,7 @@ describe('open', () => {
     secureStoreMock.__store.set('c1', await encryptRecord(v1, key)); // now it decrypts
     await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records.map((r) => r.id).sort()).toEqual([a.id, 'c1'].sort());
+    expect(useRecordsStore.getState().migrationPending).toBe(false);
     expect(secureStoreMock.__store.size).toBe(0);
   });
 

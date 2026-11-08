@@ -116,13 +116,14 @@ export interface RecordDraft {
 
 /**
  * What stops a draft from being saved, or null. A title is always required;
- * a record must hold at least one value unless it is a Custom record with no
- * fields at all (a title-only placeholder is a legitimate thing to keep).
+ * a record must hold at least one value. The one exception is a Custom
+ * record with no fields at all (a title-only placeholder is a legitimate
+ * thing to keep); any other template with every field removed needs one back.
  */
 export const validateDraft = (draft: RecordDraft): string | null => {
   if (draft.title.trim() === '') return 'Give the record a title';
-  const titleOnly = draft.template === 'custom' && draft.fields.length === 0;
-  if (!titleOnly && allValuesEmpty(draft.fields)) return 'Fill in at least one field';
+  if (draft.fields.length === 0) return draft.template === 'custom' ? null : 'Add at least one field';
+  if (allValuesEmpty(draft.fields)) return 'Fill in at least one field';
   return null;
 };
 

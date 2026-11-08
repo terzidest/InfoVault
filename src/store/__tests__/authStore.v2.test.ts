@@ -9,6 +9,7 @@ import * as crypto from '../../utils/crypto';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
 import type { KdfParams } from '../../utils/crypto';
 import { isLiveKey } from '../vaultKey';
+import * as vaultFile from '../../services/vaultFile';
 import { encodeVault, readVaultPayload, vaultExists, writeVault } from '../../services/vaultFile';
 import type { VaultRecord } from '../../types/models';
 
@@ -34,7 +35,6 @@ const LEGACY_VERIFIER_KEY = 'vaultVerifier';
 const BIOMETRIC_KEY_STORE = 'vaultBiometricKey';
 const BIOMETRIC_ENABLED_KEY = 'vaultBiometricEnabled';
 const SETUP_KEY = 'setupComplete';
-const VAULT_KEYS = [HEADER_KEY, LEGACY_SALT_KEY, LEGACY_VERIFIER_KEY, BIOMETRIC_KEY_STORE, BIOMETRIC_ENABLED_KEY, SETUP_KEY];
 
 const FAST_PBKDF2: KdfParams = { alg: 'pbkdf2-sha256', iterations: 500 };
 
@@ -99,8 +99,8 @@ beforeEach(() => {
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
-describe('init: fresh-install rule', () => {
-  it('header + setup flag + biometric copy, but no vault file and no v1 data → everything cleared, setup', async () => {
+describe('init: fresh-install rule (routing only)', () => {
+  it('header + setup flag + biometric copy, but no vault file and no v1 data → Setup; nothing deleted by init', async () => {
     await auth().setupMasterPassword('fresh-pass-123');
     await auth().enableBiometricUnlock();
     lock();
@@ -108,15 +108,88 @@ describe('init: fresh-install rule', () => {
     fsMock.__reset();
     await auth().init();
     expect(auth().needsSetup).toBe(true);
+    for (const key of [HEADER_KEY, BIOMETRIC_KEY_STORE, BIOMETRIC_ENABLED_KEY, SETUP_KEY]) {
+      expect(secureStoreMock.__store.has(key)).toBe(true);
+    }
+
+    // Setup is what clears the stale material, then builds a new vault.
+    const oldHeader = secureStoreMock.__store.get(HEADER_KEY);
+    expect(await auth().setupMasterPassword('new-pass-456')).toBe(true);
+    expect(auth().isAuthenticated).toBe(true);
+    expect(secureStoreMock.__store.get(HEADER_KEY)).not.toEqual(oldHeader);
+    expect(secureStoreMock.__store.has(BIOMETRIC_KEY_STORE)).toBe(false);
+    expect(secureStoreMock.__store.has(BIOMETRIC_ENABLED_KEY)).toBe(false);
     expect(auth().biometricEnabled).toBe(false);
-    for (const key of VAULT_KEYS) expect(secureStoreMock.__store.has(key)).toBe(false);
+    expect(vaultExists()).toBe(true);
   });
 
-  it('a header left by an interrupted setup (no setup flag) is cleared too', async () => {
+  it('a header left by an interrupted setup (no setup flag) routes to Setup and stays put', async () => {
     secureStoreMock.__store.set(HEADER_KEY, '{"version":2}');
     await auth().init();
     expect(auth().needsSetup).toBe(true);
-    expect(secureStoreMock.__store.has(HEADER_KEY)).toBe(false);
+    expect(secureStoreMock.__store.has(HEADER_KEY)).toBe(true);
+  });
+
+  it('a false "no file" probe at init costs a restart, never the vault', async () => {
+    await auth().setupMasterPassword('fresh-pass-123');
+    await records().add({ title: 'Keep me', template: 'note', fields: [], pinned: false, tags: [] });
+    lock();
+    const header = secureStoreMock.__store.get(HEADER_KEY);
+    const file = fsMock.__files.get(VAULT);
+
+    jest.spyOn(vaultFile, 'vaultExists').mockReturnValueOnce(false);
+    await auth().init();
+    expect(auth().needsSetup).toBe(true);
+    expect(secureStoreMock.__store.get(HEADER_KEY)).toBe(header);
+
+    // Setup re-checks and refuses: header + file = a real vault.
+    expect(await auth().setupMasterPassword('other-pass')).toBe(false);
+    expect(auth().authError).toBe('A vault already exists on this device. Restart the app.');
+    expect(auth().needsSetup).toBe(false);
+    expect(auth().isAuthenticated).toBe(false);
+    expect(secureStoreMock.__store.get(HEADER_KEY)).toBe(header);
+    expect(fsMock.__files.get(VAULT)).toBe(file);
+
+    // Next launch: the probe is right, unlock path, data intact.
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+    expect(await auth().unlockWithPassword('fresh-pass-123')).toBe(true);
+    expect(records().records.map((r) => r.title)).toEqual(['Keep me']);
+  });
+
+  it('a pre-header v1 vault (salt + verifier, no records, no file) is the unlock path, not Setup', async () => {
+    await seedV1Device('correct-pw');
+    const store = secureStoreMock.__store;
+    for (const k of ['cred-1', 'note-1', 'credentialKeys', 'noteKeys']) store.delete(k);
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+    expect(auth().hasLegacyData).toBe(false);
+
+    expect(await auth().unlockWithPassword('correct-pw')).toBe(true);
+    expect(store.has(HEADER_KEY)).toBe(true);
+    expect(store.has(LEGACY_SALT_KEY)).toBe(false);
+    expect(vaultExists()).toBe(true);
+    lock();
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+  });
+
+  it('a header with no file and no registries → Setup; a header with no file but registries → unlock', async () => {
+    await auth().setupMasterPassword('fresh-pass-123');
+    lock();
+    fsMock.__reset();
+    await auth().init();
+    expect(auth().needsSetup).toBe(true);
+    secureStoreMock.__store.set('credentialKeys', '[]');
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+  });
+
+  it('no header and no legacy salt (only a stray setup flag) → Setup', async () => {
+    secureStoreMock.__store.set(SETUP_KEY, 'true');
+    fsMock.__files.set(VAULT, new Uint8Array([1]));
+    await auth().init();
+    expect(auth().needsSetup).toBe(true);
   });
 
   it('header + no file, but v1 registries exist → not fresh (a v1 device about to migrate)', async () => {
@@ -318,7 +391,7 @@ describe('unlock', () => {
 
   it('a header with no file and no registries at all still gets a vault file on unlock', async () => {
     // The PR #28 state: header migrated, never a single record, no file. Reached
-    // without init() (which would read it as a reinstall), e.g. an app that was
+    // without init() (which would route to Setup), e.g. an app that was
     // already running when the update landed.
     await seedV1Device('correct-pw');
     const store = secureStoreMock.__store;
@@ -329,6 +402,34 @@ describe('unlock', () => {
     await auth().init();
     expect(auth().needsSetup).toBe(false);
     expect(store.has(HEADER_KEY)).toBe(true);
+  });
+
+  it('two concurrent unlocks: the second returns false at once and the vault opens once', async () => {
+    await auth().setupMasterPassword('fresh-pass-123');
+    await auth().enableBiometricUnlock();
+    lock();
+    const open = jest.spyOn(useRecordsStore.getState(), 'open');
+    const results = await Promise.all([auth().unlockWithPassword('fresh-pass-123'), auth().unlockWithBiometrics()]);
+    expect(results).toEqual([true, false]);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(auth().isAuthenticated).toBe(true);
+    expect(auth().authError).toBeNull();
+    expect(records().isOpen).toBe(true);
+    // And the other way round, including setup refusing to run mid-unlock.
+    lock();
+    const again = await Promise.all([auth().unlockWithBiometrics(), auth().unlockWithPassword('fresh-pass-123'), auth().setupMasterPassword('x')]);
+    expect(again).toEqual([true, false, false]);
+    expect(secureStoreMock.__store.has(HEADER_KEY)).toBe(true);
+  });
+
+  it('a key that replaces one already in memory is zeroed first', async () => {
+    await auth().setupMasterPassword('fresh-pass-123');
+    const first = auth().encryptionKey ?? new Uint8Array();
+    // Simulate a stale key reference being superseded without a lock.
+    useAuthStore.setState({ isAuthenticated: false });
+    expect(await auth().unlockWithPassword('fresh-pass-123')).toBe(true);
+    expect(auth().encryptionKey).not.toBe(first);
+    expect(first.every((b) => b === 0)).toBe(true);
   });
 
   it('isMigrating comes from init()\'s probe (no second probe) and is off afterwards', async () => {
@@ -360,6 +461,27 @@ describe('unlock', () => {
     expect(records().migrationPending).toBe(true);
     expect(auth().hasLegacyData).toBe(true);
     expect(auth().isMigrating).toBe(false);
+  });
+
+  it('skipped (unreadable) v1 entries also leave migrationPending on', async () => {
+    await seedV1Device('correct-pw');
+    secureStoreMock.__store.set('cred-1', 'v1:00:00'); // undecryptable
+    await auth().init();
+    expect(await auth().unlockWithPassword('correct-pw')).toBe(true);
+    expect(records().records.map((r) => r.id)).toEqual(['note-1']);
+    expect(records().migrationPending).toBe(true);
+    expect(auth().hasLegacyData).toBe(true);
+    expect(secureStoreMock.__store.has('cred-1')).toBe(true);
+  });
+
+  it('with no legacy data, unlock does not probe the registries at all', async () => {
+    await auth().setupMasterPassword('fresh-pass-123');
+    lock();
+    await auth().init();
+    expect(auth().hasLegacyData).toBe(false);
+    const probe = jest.spyOn(SecureStore, 'getItemAsync');
+    expect(await auth().unlockWithPassword('fresh-pass-123')).toBe(true);
+    expect(probe.mock.calls.filter(([k]) => /Keys$/.test(String(k)))).toHaveLength(0);
   });
 
   it('isMigrating is on while a v1 device opens and off afterwards', async () => {

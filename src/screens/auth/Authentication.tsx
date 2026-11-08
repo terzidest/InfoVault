@@ -26,6 +26,15 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
   const biometricAttempted = useRef(false);
   const animationRef = useRef<LottieView>(null);
 
+  // Shows why an unlock attempt failed. The store's authError wins (a corrupt
+  // vault is not a wrong password); `fallback` covers the paths that set none.
+  // A dismissed biometric prompt sets nothing and so shows nothing. Never
+  // surfaces a late failure once a concurrent attempt has already unlocked.
+  const reportFailure = (ok: boolean, fallback: string | null = null) => {
+    const auth = useAuthStore.getState();
+    if (!ok && !auth.isAuthenticated) setError(auth.authError ?? fallback);
+  };
+
   useFocusEffect(
     React.useCallback(() => {
       setPassword('');
@@ -36,12 +45,7 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
       // leaves the screen in place with the password input as fallback.
       if (biometricEnabled && !biometricAttempted.current) {
         biometricAttempted.current = true;
-        unlockWithBiometrics().then((ok) => {
-          // Same as the button: an open failure must be shown, a dismissed
-          // prompt says nothing (authError stays null).
-          const auth = useAuthStore.getState();
-          if (!ok && !auth.isAuthenticated) setError(auth.authError);
-        });
+        unlockWithBiometrics().then(reportFailure);
       }
       return () => {
         biometricAttempted.current = false;
@@ -70,24 +74,14 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     const auth = useAuthStore.getState();
     if (!password || auth.isLoading || auth.isAuthenticated) return;
     setError(null);
-    const ok = await unlockWithPassword(password);
-    // A late failure must not surface an error after a concurrent biometric
-    // attempt has already unlocked the vault.
-    if (!ok && !useAuthStore.getState().isAuthenticated) {
-      // A corrupt vault file is not a wrong password; say what the store says.
-      setError(useAuthStore.getState().authError ?? 'Incorrect master password');
-    }
+    reportFailure(await unlockWithPassword(password), 'Incorrect master password');
   };
 
   const handleBiometric = async () => {
     const auth = useAuthStore.getState();
     if (auth.isLoading || auth.isAuthenticated) return;
     setError(null);
-    const ok = await unlockWithBiometrics();
-    if (!ok && !useAuthStore.getState().isAuthenticated) {
-      // Only an open failure sets authError; a dismissed prompt says nothing.
-      setError(useAuthStore.getState().authError);
-    }
+    reportFailure(await unlockWithBiometrics());
   };
 
   return (

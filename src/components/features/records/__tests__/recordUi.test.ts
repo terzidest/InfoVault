@@ -219,7 +219,8 @@ describe('editor draft helpers', () => {
     const empty = field('Number', 'number', '');
     expect(validateDraft({ title: '  ', template: 'idNumber', fields: [value] })).toBe('Give the record a title');
     expect(validateDraft({ title: 'ΑΦΜ', template: 'idNumber', fields: [empty] })).toBe('Fill in at least one field');
-    expect(validateDraft({ title: 'Note', template: 'note', fields: [] })).toBe('Fill in at least one field');
+    expect(validateDraft({ title: 'Note', template: 'note', fields: [] })).toBe('Add at least one field');
+    expect(validateDraft({ title: 'Login', template: 'login', fields: [] })).toBe('Add at least one field');
     expect(validateDraft({ title: 'ΑΦΜ', template: 'idNumber', fields: [value] })).toBeNull();
     expect(validateDraft({ title: 'Placeholder', template: 'custom', fields: [] })).toBeNull();
     expect(validateDraft({ title: 'Placeholder', template: 'custom', fields: [empty] })).toBe('Fill in at least one field');
