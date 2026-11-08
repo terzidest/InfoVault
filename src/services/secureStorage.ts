@@ -3,12 +3,11 @@ import type { StorageType } from '../types/storage';
 import { encryptRecord, decryptRecord } from '../utils/crypto';
 import useAuthStore from '../store/authStore';
 import { requireKey } from '../store/vaultKey';
+import { registryKey } from './legacyVault';
 
-export const STORAGE_TYPES: readonly StorageType[] = ['credential', 'note', 'personalInfo'];
-
-// The SecureStore entry listing a type's record ids (v1 layout). The v2
-// migration reads these; nothing else should spell the name.
-export const registryKey = (type: StorageType): string => `${type}Keys`;
+// v1 per-record SecureStore CRUD. Only the three v1 domain stores still use
+// it; they go at the screen cutover and this file with them. The layout's
+// names and the wipe live in legacyVault.ts, which migration/setup use.
 
 export const saveToSecureStore = async (
   key: string,
@@ -91,17 +90,5 @@ export const getAllItemsByType = async <T = unknown>(type: StorageType): Promise
   } catch (error) {
     console.error('Error getting all items by type', error);
     return [];
-  }
-};
-
-// Deletes every stored record across all types (and their key registries).
-// Needs no encryption key — used to reset the vault on first encrypted launch.
-export const wipeAllRecords = async (): Promise<void> => {
-  for (const type of STORAGE_TYPES) {
-    const keys = await getKeysByType(type);
-    for (const key of keys) {
-      await SecureStore.deleteItemAsync(key);
-    }
-    await SecureStore.deleteItemAsync(registryKey(type));
   }
 };

@@ -48,7 +48,13 @@ const discardScratch = (): void => {
   deleteIfExists(corruptFile());
 };
 
-export const vaultExists = (): boolean => vaultFile().exists;
+/**
+ * Whether a vault is on disk — as `vault.bin`, or as the `.bak` that holds
+ * the last acknowledged file while a commit is in flight (readVaultPayload
+ * restores it). The fresh-install check in authStore relies on this: a crash
+ * between the two moves of a commit must never look like a reinstall.
+ */
+export const vaultExists = (): boolean => vaultFile().exists || bakFile().exists;
 
 /** Seals a payload with a fresh expo-crypto nonce. Pure apart from the nonce draw. */
 export const encodeVault = async (

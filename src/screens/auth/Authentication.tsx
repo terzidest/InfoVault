@@ -18,6 +18,7 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     unlockWithBiometrics,
     isAuthenticated,
     isLoading,
+    isMigrating,
     biometricEnabled,
   } = useAuthStore();
   const [password, setPassword] = useState('');
@@ -68,7 +69,8 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     // A late failure must not surface an error after a concurrent biometric
     // attempt has already unlocked the vault.
     if (!ok && !useAuthStore.getState().isAuthenticated) {
-      setError('Incorrect master password');
+      // A corrupt vault file is not a wrong password; say what the store says.
+      setError(useAuthStore.getState().authError ?? 'Incorrect master password');
     }
   };
 
@@ -76,7 +78,11 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     const auth = useAuthStore.getState();
     if (auth.isLoading || auth.isAuthenticated) return;
     setError(null);
-    await unlockWithBiometrics();
+    const ok = await unlockWithBiometrics();
+    if (!ok && !useAuthStore.getState().isAuthenticated) {
+      // Only an open failure sets authError; a dismissed prompt says nothing.
+      setError(useAuthStore.getState().authError);
+    }
   };
 
   return (
@@ -105,6 +111,9 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
           </View>
 
           <View style={styles.form}>
+            {isMigrating && (
+              <Text style={styles.status}>Upgrading your vault…</Text>
+            )}
             {biometricEnabled && (
               <Button
                 onPress={handleBiometric}
@@ -171,6 +180,13 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   biometricButton: {
+    marginBottom: 12,
+  },
+  status: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.primary,
+    textAlign: 'center',
     marginBottom: 12,
   },
 });

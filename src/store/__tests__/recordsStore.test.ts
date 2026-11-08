@@ -176,7 +176,7 @@ describe('open', () => {
     expect(key.length).toBe(32);
   });
 
-  it('a lock evicts the records without the cutover having to call clear()', async () => {
+  it('a lock (logout) evicts the records and refuses the mutation in flight', async () => {
     await unlockWith();
     await useRecordsStore.getState().open();
     await useRecordsStore.getState().add(loginInput('A'));

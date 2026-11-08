@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import useAuthStore from './authStore';
 import { createOpTracker } from './opTracker';
 import { isLiveKey, requireKey } from './vaultKey';
 import { migrateV1 } from '../services/migrateV1';
@@ -12,8 +11,10 @@ import type { VaultRecord, VaultRecordInput } from '../types/models';
 
 // The v2 record store: every record of every template, held decrypted in
 // memory while the vault is unlocked and persisted as one sealed file
-// (services/vaultFile.ts). Not yet wired into unlock — the cutover PR does
-// that; until then the three v1 domain stores remain what the screens use.
+// (services/vaultFile.ts). authStore drives it: unlock/setup call open(),
+// logout() calls clear(). This module must not touch authStore at load time
+// (authStore imports it; a module-level use would run against a half-loaded
+// module) — the key is read at call time through vaultKey.ts.
 
 export class RecordTooLargeError extends Error {
   constructor(bytes: number) {
@@ -215,13 +216,6 @@ const useRecordsStore = create<RecordsState>((set, get) => {
       set({ records: [], isOpen: false, error: null });
     },
   };
-});
-
-// Locking must evict the decrypted records even before the cutover wires
-// clear() into logout(): follow authStore and clear whenever the session ends.
-useAuthStore.subscribe((state, previous) => {
-  const lockedNow = (previous.isAuthenticated && !state.isAuthenticated) || (previous.encryptionKey && !state.encryptionKey);
-  if (lockedNow) useRecordsStore.getState().clear();
 });
 
 export default useRecordsStore;

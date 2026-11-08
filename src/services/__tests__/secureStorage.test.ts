@@ -8,7 +8,6 @@ import {
   getFromSecureStore,
   getKeysByType,
   saveToSecureStore,
-  wipeAllRecords,
 } from '../secureStorage';
 
 const secureStoreMock = SecureStore as unknown as { __store: Map<string, string>; __reset: () => void };
@@ -75,14 +74,5 @@ describe('encrypted record storage', () => {
     await expect(saveToSecureStore('late', { id: 'late' }, 'note')).rejects.toThrow('Vault is locked');
     expect(secureStoreMock.__store.has('late')).toBe(false);
     expect(await getKeysByType('note')).toEqual([]);
-  });
-
-  it('wipeAllRecords clears every type and registry and needs no key', async () => {
-    await unlockWith();
-    await saveToSecureStore('c', { id: 'c' }, 'credential');
-    await saveToSecureStore('n', { id: 'n' }, 'note');
-    useAuthStore.setState({ encryptionKey: null, isAuthenticated: false });
-    await wipeAllRecords();
-    expect([...secureStoreMock.__store.keys()]).toEqual([]);
   });
 });

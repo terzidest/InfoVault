@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { decryptRecord, generateSecureId, isRecord } from '../utils/crypto';
 import { fromV1Credential, fromV1Note, fromV1PersonalInfo, timestamp } from '../utils/records';
 import { isStringArray, isVaultRecord } from '../utils/vaultFormat';
-import { STORAGE_TYPES, registryKey } from './secureStorage';
+import { STORAGE_TYPES, registryKey } from './legacyVault';
 import { readVaultPayload, writeVault } from './vaultFile';
 import type { IsKeyLive } from './vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../types/models';
