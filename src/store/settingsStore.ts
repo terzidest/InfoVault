@@ -8,7 +8,7 @@ const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
   theme: 'system',
   autoLockTimeout: 300000,
-  maskSensitiveData: true,
+  sortMode: 'lastUsed',
 };
 
 // One-shot migration of a persisted blob to the current schema.
@@ -20,10 +20,16 @@ const DEFAULT_SETTINGS: Settings = {
 // back, so the mapping runs exactly once: a 'light' the user picks later in
 // the v2 settings UI is stored with the version stamp and left alone.
 // Newer keys are filled from defaults so an older blob never yields
-// undefined settings.
+// undefined settings; keys that no longer exist (v1's maskSensitiveData) are
+// dropped by the spread into the typed object and vanish on the write-back.
 export const migrateStoredSettings = (stored: Partial<Settings>): Settings => {
   const isLegacy = stored.version === undefined;
-  const merged: Settings = { ...DEFAULT_SETTINGS, ...stored, version: SETTINGS_VERSION };
+  const merged: Settings = {
+    version: SETTINGS_VERSION,
+    theme: stored.theme ?? DEFAULT_SETTINGS.theme,
+    autoLockTimeout: stored.autoLockTimeout ?? DEFAULT_SETTINGS.autoLockTimeout,
+    sortMode: stored.sortMode ?? DEFAULT_SETTINGS.sortMode,
+  };
   if (isLegacy && merged.theme === 'light') {
     merged.theme = 'system';
   }

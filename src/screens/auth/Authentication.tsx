@@ -18,12 +18,22 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     unlockWithBiometrics,
     isAuthenticated,
     isLoading,
+    isMigrating,
     biometricEnabled,
   } = useAuthStore();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const biometricAttempted = useRef(false);
   const animationRef = useRef<LottieView>(null);
+
+  // Shows why an unlock attempt failed. The store's authError wins (a corrupt
+  // vault is not a wrong password); `fallback` covers the paths that set none.
+  // A dismissed biometric prompt sets nothing and so shows nothing. Never
+  // surfaces a late failure once a concurrent attempt has already unlocked.
+  const reportFailure = (ok: boolean, fallback: string | null = null) => {
+    const auth = useAuthStore.getState();
+    if (!ok && !auth.isAuthenticated) setError(auth.authError ?? fallback);
+  };
 
   useFocusEffect(
     React.useCallback(() => {
@@ -35,7 +45,7 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
       // leaves the screen in place with the password input as fallback.
       if (biometricEnabled && !biometricAttempted.current) {
         biometricAttempted.current = true;
-        unlockWithBiometrics();
+        unlockWithBiometrics().then(reportFailure);
       }
       return () => {
         biometricAttempted.current = false;
@@ -64,19 +74,14 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     const auth = useAuthStore.getState();
     if (!password || auth.isLoading || auth.isAuthenticated) return;
     setError(null);
-    const ok = await unlockWithPassword(password);
-    // A late failure must not surface an error after a concurrent biometric
-    // attempt has already unlocked the vault.
-    if (!ok && !useAuthStore.getState().isAuthenticated) {
-      setError('Incorrect master password');
-    }
+    reportFailure(await unlockWithPassword(password), 'Incorrect master password');
   };
 
   const handleBiometric = async () => {
     const auth = useAuthStore.getState();
     if (auth.isLoading || auth.isAuthenticated) return;
     setError(null);
-    await unlockWithBiometrics();
+    reportFailure(await unlockWithBiometrics());
   };
 
   return (
@@ -105,6 +110,9 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
           </View>
 
           <View style={styles.form}>
+            {isMigrating && (
+              <Text style={styles.status}>Upgrading your vault…</Text>
+            )}
             {biometricEnabled && (
               <Button
                 onPress={handleBiometric}
@@ -171,6 +179,13 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   biometricButton: {
+    marginBottom: 12,
+  },
+  status: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.primary,
+    textAlign: 'center',
     marginBottom: 12,
   },
 });

@@ -124,7 +124,7 @@ describe('settingsStore theme migration', () => {
   beforeEach(() => {
     secureStoreMock.__reset();
     useSettingsStore.setState({
-      settings: { version: SETTINGS_VERSION, theme: 'system', autoLockTimeout: 300000, maskSensitiveData: true },
+      settings: { version: SETTINGS_VERSION, theme: 'system', autoLockTimeout: 300000, sortMode: 'lastUsed' },
       isLoading: false,
       error: null,
     });
@@ -138,11 +138,12 @@ describe('settingsStore theme migration', () => {
     const settings = await useSettingsStore.getState().initSettings();
     expect(settings.theme).toBe('system');
     expect(settings.autoLockTimeout).toBe(60000);
-    expect(settings.maskSensitiveData).toBe(false);
+    expect('maskSensitiveData' in settings).toBe(false); // v1-only key is dropped
 
     const persisted = JSON.parse(secureStoreMock.__store.get('appSettings') ?? '{}') as Record<string, unknown>;
     expect(persisted.version).toBe(SETTINGS_VERSION);
     expect(persisted.theme).toBe('system');
+    expect(persisted.maskSensitiveData).toBeUndefined();
   });
 
   it("keeps a stored v1 'dark'", async () => {
@@ -162,7 +163,7 @@ describe('settingsStore theme migration', () => {
       version: SETTINGS_VERSION,
       theme: 'system',
       autoLockTimeout: 300000,
-      maskSensitiveData: true,
+      sortMode: 'lastUsed',
     });
     expect(migrateStoredSettings({ theme: 'light' }).theme).toBe('system');
     expect(migrateStoredSettings({ version: SETTINGS_VERSION, theme: 'light' }).theme).toBe('light');

@@ -90,6 +90,44 @@ export const kindCycle = (kind: FieldKind): FieldKind => {
 export const isMonoKind = (kind: FieldKind): boolean => kind === 'number' || kind === 'secret';
 
 // ---------------------------------------------------------------------------
+// Editor draft
+// ---------------------------------------------------------------------------
+
+/** True when no field holds anything yet (a template switch may replace them). */
+export const allValuesEmpty = (fields: readonly Field[]): boolean => fields.every((f) => f.value.trim() === '');
+
+/** Swaps the field at `index` with its neighbour; out of range → unchanged copy. */
+export const moveField = (fields: readonly Field[], index: number, direction: -1 | 1): Field[] => {
+  const next = [...fields];
+  const target = index + direction;
+  const a = next[index];
+  const b = next[target];
+  if (a === undefined || b === undefined) return next;
+  next[index] = b;
+  next[target] = a;
+  return next;
+};
+
+export interface RecordDraft {
+  title: string;
+  template: TemplateId;
+  fields: readonly Field[];
+}
+
+/**
+ * What stops a draft from being saved, or null. A title is always required;
+ * a record must hold at least one value. The one exception is a Custom
+ * record with no fields at all (a title-only placeholder is a legitimate
+ * thing to keep); any other template with every field removed needs one back.
+ */
+export const validateDraft = (draft: RecordDraft): string | null => {
+  if (draft.title.trim() === '') return 'Give the record a title';
+  if (draft.fields.length === 0) return draft.template === 'custom' ? null : 'Add at least one field';
+  if (allValuesEmpty(draft.fields)) return 'Fill in at least one field';
+  return null;
+};
+
+// ---------------------------------------------------------------------------
 // Tags
 // ---------------------------------------------------------------------------
 

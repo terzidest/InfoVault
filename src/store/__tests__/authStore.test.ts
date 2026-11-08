@@ -1,12 +1,14 @@
+import * as FileSystem from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
 import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import useAuthStore from '../authStore';
-import useCredentialsStore from '../credentialsStore';
+import useRecordsStore from '../recordsStore';
 import * as crypto from '../../utils/crypto';
-import { decryptRecord, encryptRecord, parseVaultHeader } from '../../utils/crypto';
+import { encryptRecord, parseVaultHeader } from '../../utils/crypto';
 import type { KdfParams } from '../../utils/crypto';
+import { readVaultPayload } from '../../services/vaultFile';
 
 // The manual mock (see __mocks__/) exposes test-only helpers beyond the real
 // module's surface. It must be reached through the same import the code under
@@ -18,6 +20,9 @@ const secureStoreMock = SecureStore as unknown as {
   __failNextSet: (key: string) => void;
   __authGatedWrites: () => number;
 };
+const fsMock = FileSystem as unknown as { __files: Map<string, Uint8Array>; __reset: () => void };
+
+const VAULT = 'file:///mock/documents/vault.bin';
 
 const HEADER_KEY = 'vaultHeader';
 const LEGACY_SALT_KEY = 'vaultSalt';
@@ -36,6 +41,10 @@ const silenceConsole = () => {
 
 const lock = () => useAuthStore.getState().logout();
 
+// Titles of the records the open vault holds (the v1 'cred-1' entry is
+// migrated into the vault file on the first unlock).
+const openTitles = () => useRecordsStore.getState().records.map((r) => r.title);
+
 // Builds a vault exactly as the pre-header (v1.0.0) setup code wrote it:
 // PBKDF2 100k → key, verifier = sentinel sealed under that key, records
 // sealed under the same key, biometric copy = the key itself.
@@ -49,6 +58,7 @@ const seedLegacyVault = async (password: string) => {
   store.set(LEGACY_SALT_KEY, salt);
   store.set(LEGACY_VERIFIER_KEY, await encryptRecord('infovault-verifier-v1', legacyKey));
   store.set('cred-1', await encryptRecord({ id: 'cred-1', title: 'Gmail', password: 'hunter2' }, legacyKey));
+  // Setup-era test fixture: no timestamps; the migration fills them in.
   store.set('credentialKeys', JSON.stringify(['cred-1']));
   store.set(BIOMETRIC_KEY_STORE, bytesToHex(legacyKey));
   store.set(BIOMETRIC_ENABLED_KEY, 'true');
@@ -58,6 +68,7 @@ const seedLegacyVault = async (password: string) => {
 
 beforeEach(() => {
   secureStoreMock.__reset();
+  fsMock.__reset();
   jest.replaceProperty(crypto, 'CURRENT_KDF', FAST_PBKDF2);
   useAuthStore.setState({
     isAuthenticated: false,
@@ -69,7 +80,10 @@ beforeEach(() => {
     biometricAvailable: false,
     biometricEnabled: false,
     biometricRepairNeeded: false,
+    hasLegacyData: false,
+    isMigrating: false,
   });
+  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false, migrationPending: false });
   silenceConsole();
 });
 
@@ -97,9 +111,9 @@ describe('legacy (salt + verifier) vault migration', () => {
     expect(secureStoreMock.__store.has(LEGACY_SALT_KEY)).toBe(false);
     expect(secureStoreMock.__store.has(LEGACY_VERIFIER_KEY)).toBe(false);
 
-    // Existing records still decrypt under the vault key.
-    const rec = decryptRecord<{ title: string }>(secureStoreMock.__store.get('cred-1') ?? '', key ?? new Uint8Array());
-    expect(rec.title).toBe('Gmail');
+    // Existing records opened under the vault key and moved into the file.
+    expect(openTitles()).toEqual(['Gmail']);
+    expect(secureStoreMock.__store.has('cred-1')).toBe(false);
   });
 
   it('the stored biometric copy still opens the vault after migration', async () => {
@@ -108,8 +122,7 @@ describe('legacy (salt + verifier) vault migration', () => {
     await useAuthStore.getState().unlockWithPassword('correct-pw');
     lock();
     expect(await useAuthStore.getState().unlockWithBiometrics()).toBe(true);
-    const key = useAuthStore.getState().encryptionKey ?? new Uint8Array();
-    expect(decryptRecord<{ title: string }>(secureStoreMock.__store.get('cred-1') ?? '', key).title).toBe('Gmail');
+    expect(openTitles()).toEqual(['Gmail']);
   });
 
   it('retries the migration on the next unlock if the header write failed', async () => {
@@ -127,7 +140,7 @@ describe('legacy (salt + verifier) vault migration', () => {
 });
 
 describe('header vault', () => {
-  it('setup writes a header and no legacy entries, and wipes pre-existing records', async () => {
+  it('setup writes a header and no legacy entries, wipes pre-existing records and writes an empty vault', async () => {
     secureStoreMock.__store.set('cred-stale', 'plaintext-junk');
     secureStoreMock.__store.set('credentialKeys', JSON.stringify(['cred-stale']));
     secureStoreMock.__store.set(LEGACY_SALT_KEY, 'aa');
@@ -137,6 +150,8 @@ describe('header vault', () => {
     expect(secureStoreMock.__store.has(LEGACY_SALT_KEY)).toBe(false);
     expect(secureStoreMock.__store.has('cred-stale')).toBe(false);
     expect(secureStoreMock.__store.get(SETUP_KEY)).toBe('true');
+    expect(fsMock.__files.has(VAULT)).toBe(true);
+    expect(useRecordsStore.getState().isOpen).toBe(true);
   });
 
   it('unlocks with the right password only, and the vault key is stable across unlocks', async () => {
@@ -152,7 +167,8 @@ describe('header vault', () => {
     await useAuthStore.getState().setupMasterPassword('fresh-pass-123');
     const key = useAuthStore.getState().encryptionKey ?? new Uint8Array();
     const keyHex = bytesToHex(key); // lock() zeroes `key` in place below
-    secureStoreMock.__store.set('cred-1', await encryptRecord({ title: 'x' }, key));
+    await useRecordsStore.getState().add({ title: 'x', template: 'note', fields: [], pinned: false, tags: [] });
+    const fileBefore = fsMock.__files.get(VAULT);
     const before = secureStoreMock.__store.get(HEADER_KEY);
     lock();
 
@@ -163,7 +179,9 @@ describe('header vault', () => {
     expect(parseVaultHeader(after).kdf).toEqual(FAST_ARGON2);
     const key2 = useAuthStore.getState().encryptionKey ?? new Uint8Array();
     expect(bytesToHex(key2)).toEqual(keyHex);
-    expect(decryptRecord<{ title: string }>(secureStoreMock.__store.get('cred-1') ?? '', key2).title).toBe('x');
+    expect(fsMock.__files.get(VAULT)).toBe(fileBefore); // the file was not rewritten
+    expect((await readVaultPayload(key2))?.records.map((r) => r.title)).toEqual(['x']);
+    expect(openTitles()).toEqual(['x']);
 
     // Already current: no rewrite.
     lock();
@@ -198,12 +216,13 @@ describe('lock', () => {
   it('zeroes the key bytes, drops the key, and evicts decrypted records', async () => {
     await useAuthStore.getState().setupMasterPassword('fresh-pass-123');
     const key = useAuthStore.getState().encryptionKey ?? new Uint8Array();
-    useCredentialsStore.setState({ credentials: [{ id: '1', title: 't', createdAt: '', updatedAt: '' }] });
+    await useRecordsStore.getState().add({ title: 't', template: 'note', fields: [], pinned: false, tags: [] });
     lock();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().encryptionKey).toBeNull();
     expect(key.every((b) => b === 0)).toBe(true);
-    expect(useCredentialsStore.getState().credentials).toEqual([]);
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().isOpen).toBe(false);
   });
 
   it('checkTimeout locks after the idle window and not before', async () => {
@@ -310,6 +329,8 @@ describe('init', () => {
     expect(useAuthStore.getState().needsSetup).toBe(true);
     secureStoreMock.__store.set(SETUP_KEY, 'true');
     secureStoreMock.__store.set(BIOMETRIC_ENABLED_KEY, 'true');
+    secureStoreMock.__store.set(HEADER_KEY, '{"version":2}');
+    fsMock.__files.set(VAULT, new Uint8Array([1])); // a vault is on disk, so this is not a reinstall
     await useAuthStore.getState().init();
     expect(useAuthStore.getState().needsSetup).toBe(false);
     expect(useAuthStore.getState().biometricEnabled).toBe(true);

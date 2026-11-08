@@ -1,15 +1,15 @@
 import * as SecureStore from 'expo-secure-store';
 import { decryptRecord, generateSecureId, isRecord } from '../utils/crypto';
 import { fromV1Credential, fromV1Note, fromV1PersonalInfo, timestamp } from '../utils/records';
-import { isStringArray, isVaultRecord } from '../utils/vaultFormat';
-import { STORAGE_TYPES, registryKey } from './secureStorage';
+import { isVaultRecord } from '../utils/vaultFormat';
+import { parseRegistry, readRegistries, registryKey } from './legacyVault';
+import type { StorageType } from './legacyVault';
 import { readVaultPayload, writeVault } from './vaultFile';
 import type { IsKeyLive } from './vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../types/models';
-import type { StorageType } from '../types/storage';
 
 // v1 → v2 storage migration: the per-record SecureStore entries (sealed under
-// the vault key by v1's secureStorage) become records in vault.bin. Takes the
+// the vault key by v1's per-record storage) become records in vault.bin. Takes the
 // key explicitly rather than going through authStore: after a v1.0.0 → v2
 // update a biometric-first unlock has the key but no header yet, and the key
 // is all this needs — but it must be the live authStore key, because the
@@ -43,32 +43,7 @@ export interface MigrationResult {
   migratedV1Ids: string[];
 }
 
-interface Registry {
-  type: StorageType;
-  raw: string;
-}
-
-// One parallel read of the three registries; the only probe there is.
-const readRegistries = async (): Promise<Registry[]> => {
-  const raws = await Promise.all(STORAGE_TYPES.map((type) => SecureStore.getItemAsync(registryKey(type))));
-  const found: Registry[] = [];
-  STORAGE_TYPES.forEach((type, i) => {
-    const raw = raws[i];
-    if (raw !== null && raw !== undefined) found.push({ type, raw });
-  });
-  return found;
-};
-
 export const hasV1Data = async (): Promise<boolean> => (await readRegistries()).length > 0;
-
-const parseRegistry = (raw: string): string[] | null => {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return isStringArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
 
 // ---------------------------------------------------------------------------
 // v1 shape normalization

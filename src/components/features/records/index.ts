@@ -19,9 +19,12 @@ export {
   kindCycle,
   normalizeTag,
   addTag,
+  allValuesEmpty,
+  moveField,
+  validateDraft,
   rowCopyTarget,
   subtitleIsMono,
   countdown,
   normalizeUrl,
 } from './recordUi';
-export type { BadgeTone, ExpiryBadge, CopyTarget, CharClass, CharClasses, GeneratorLength } from './recordUi';
+export type { BadgeTone, ExpiryBadge, CopyTarget, CharClass, CharClasses, GeneratorLength, RecordDraft } from './recordUi';

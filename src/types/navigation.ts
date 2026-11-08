@@ -1,18 +1,12 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { TemplateId } from './models';
 
 export type RootStackParamList = {
   SetupMasterPassword: undefined;
   Authentication: undefined;
   Home: undefined;
-  CredentialsList: undefined;
-  AddCredential: { id?: string } | undefined;
-  ViewCredential: { id: string };
-  PersonalInfoList: undefined;
-  AddPersonalInfo: { id?: string } | undefined;
-  ViewPersonalInfo: { id: string };
-  NotesList: undefined;
-  AddNote: { id?: string } | undefined;
-  ViewNote: { id: string };
+  Record: { id: string };
+  AddEditRecord: { id?: string; template?: TemplateId } | undefined;
   Settings: undefined;
 };
 
