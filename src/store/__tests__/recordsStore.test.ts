@@ -5,7 +5,7 @@ import useAuthStore from '../authStore';
 import useRecordsStore, { RecordTooLargeError } from '../recordsStore';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
 import { MAX_RECORD_BYTES } from '../../utils/records';
-import { readVault, vaultExists, writeVault } from '../../services/vaultFile';
+import { encodeVaultFile, readVault, vaultExists, writeVault } from '../../services/vaultFile';
 import type { VaultRecordInput } from '../../types/models';
 
 const fsMock = FileSystem as unknown as {
@@ -75,10 +75,63 @@ describe('open', () => {
     expect(secureStoreMock.__store.has('c1')).toBe(false);
   });
 
-  it('surfaces a wrong key as an error and rethrows', async () => {
+  it('recovers a vault whose last commit was interrupted instead of starting empty', async () => {
     const key = await unlockWith();
-    await writeVault([], key);
+    const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
+    // Crash between moving vault.bin → .bak and .tmp → vault.bin, with a partial .tmp.
+    fsMock.__files.set(`${VAULT}.bak`, await encodeVaultFile(stored, key, { kind: 'vault' }));
+    fsMock.__files.set(`${VAULT}.tmp`, new Uint8Array([0x49, 0x56]));
+    await useRecordsStore.getState().open(key);
+    expect(useRecordsStore.getState().records).toEqual(stored);
+    const b = await useRecordsStore.getState().add(loginInput('B'));
+    expect((await readVault(key))?.map((r) => r.id)).toEqual(['a', b.id]);
+  });
+
+  it('retries v1 leftovers on a later open even though a vault already exists', async () => {
+    const key = await unlockWith();
     const other = await generateVaultKey();
+    const v1 = { id: 'c1', title: 'Bank', createdAt: 't', updatedAt: 't' };
+    secureStoreMock.__store.set('c1', await encryptRecord(v1, other)); // not readable yet
+    secureStoreMock.__store.set('credentialKeys', JSON.stringify(['c1']));
+    await useRecordsStore.getState().open(key);
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(secureStoreMock.__store.has('c1')).toBe(true);
+    const a = await useRecordsStore.getState().add(loginInput('A'));
+    useRecordsStore.getState().clear();
+
+    secureStoreMock.__store.set('c1', await encryptRecord(v1, key)); // now it decrypts
+    await useRecordsStore.getState().open(key);
+    expect(useRecordsStore.getState().records.map((r) => r.id).sort()).toEqual([a.id, 'c1'].sort());
+    expect(secureStoreMock.__store.size).toBe(0);
+  });
+
+  it('publishes nothing if the vault is locked or cleared while opening', async () => {
+    const key = await unlockWith();
+    await writeVault([{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }], key);
+    // The registry probe is the first await inside open(): lock during it.
+    jest.spyOn(SecureStore, 'getItemAsync').mockImplementationOnce(async () => {
+      useAuthStore.getState().logout();
+      return null;
+    });
+    await useRecordsStore.getState().open(key);
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().isOpen).toBe(false);
+    expect(useRecordsStore.getState().error).toBeNull();
+
+    const key2 = await unlockWith();
+    jest.spyOn(SecureStore, 'getItemAsync').mockImplementationOnce(async () => {
+      useRecordsStore.getState().clear();
+      return null;
+    });
+    await useRecordsStore.getState().open(key2);
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().isOpen).toBe(false);
+    expect(useRecordsStore.getState().isLoading).toBe(false);
+  });
+
+  it('surfaces a wrong key as an error and rethrows', async () => {
+    await writeVault([], await generateVaultKey());
+    const other = await unlockWith(); // the live key is not the one the file was sealed under
     await expect(useRecordsStore.getState().open(other)).rejects.toThrow();
     expect(useRecordsStore.getState().error).not.toBeNull();
     expect(useRecordsStore.getState().isOpen).toBe(false);
@@ -111,6 +164,33 @@ describe('mutations persist through the vault file', () => {
     expect(useRecordsStore.getState().records.map((r) => r.id)).toEqual([b.id]);
     expect((await readVault(key))?.map((r) => r.id)).toEqual([b.id]);
     expect(useRecordsStore.getState().isLoading).toBe(false);
+  });
+
+  it('serializes concurrent mutations so none is lost', async () => {
+    const key = await unlockWith();
+    await useRecordsStore.getState().open(key);
+    const { add, update, remove } = useRecordsStore.getState();
+    const [a, b, c] = await Promise.all([add(loginInput('A')), add(loginInput('B')), add(loginInput('C'))]);
+    expect(useRecordsStore.getState().records.map((r) => r.id)).toEqual([a.id, b.id, c.id]);
+    expect((await readVault(key))?.map((r) => r.id)).toEqual([a.id, b.id, c.id]);
+
+    // The queued update sees the record the queued add created before it.
+    const results = await Promise.all([remove(a.id), update(b.id, { title: 'B2' }), add(loginInput('D'))]);
+    expect(results[1].title).toBe('B2');
+    expect((await readVault(key))?.map((r) => r.title)).toEqual(['B2', 'C', 'D']);
+    expect(useRecordsStore.getState().isLoading).toBe(false);
+  });
+
+  it('a mutation that completes after clear() does not repopulate memory', async () => {
+    const key = await unlockWith();
+    await useRecordsStore.getState().open(key);
+    jest.spyOn(Crypto, 'getRandomBytesAsync').mockImplementationOnce(async (n: number) => {
+      useRecordsStore.getState().clear();
+      return new Uint8Array(n);
+    });
+    const a = await useRecordsStore.getState().add(loginInput('A'));
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(await readVault(key)).toEqual([a]); // the key was still live, so the write stands
   });
 
   it('update and togglePin of a missing id throw and write nothing', async () => {

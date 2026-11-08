@@ -1,8 +1,9 @@
 import * as FileSystem from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
+import * as crypto from '../../utils/crypto';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
 import { hasV1Data, migrateV1 } from '../migrateV1';
-import { readVault, vaultExists, writeVault } from '../vaultFile';
+import { encodeVaultFile, readVault, vaultExists, writeVault } from '../vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../../types/models';
 
 const fsMock = FileSystem as unknown as {
@@ -157,12 +158,87 @@ describe('migrateV1', () => {
     expect(await hasV1Data()).toBe(false);
   });
 
-  it('drops dangling registry ids and tolerates a malformed registry without touching the vault', async () => {
-    secureStoreMock.__store.set('credentialKeys', JSON.stringify(['ghost']));
-    secureStoreMock.__store.set('noteKeys', 'not json');
+  it('reports hadV1 false, without reading the vault, when no registry exists', async () => {
+    await writeVault([{ ...CREDS[0]!, template: 'login', fields: [], pinned: false, tags: [] } as VaultRecord], key);
     const result = await migrateV1(key);
-    expect(result).toEqual({ migrated: 0, skipped: 0, records: [] });
+    expect(result).toEqual({ hadV1: false, migrated: 0, skipped: 0, records: [] });
+  });
+
+  it('drops dangling registry ids without writing a vault', async () => {
+    secureStoreMock.__store.set('credentialKeys', JSON.stringify(['ghost']));
+    const result = await migrateV1(key);
+    expect(result).toEqual({ hadV1: true, migrated: 0, skipped: 0, records: [] });
     expect(vaultExists()).toBe(false);
     expect(await hasV1Data()).toBe(false);
+  });
+
+  it('leaves a corrupt registry and every entry it names in place, and migrates the other types', async () => {
+    await seedV1(key);
+    secureStoreMock.__store.set('noteKeys', 'not json');
+    const result = await migrateV1(key);
+    expect(result.migrated).toBe(3);
+    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'p1']);
+    expect(secureStoreMock.__store.get('noteKeys')).toBe('not json');
+    expect(secureStoreMock.__store.has('n1')).toBe(true);
+    expect(secureStoreMock.__store.has('credentialKeys')).toBe(false);
+    expect(await hasV1Data()).toBe(true);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('1 registry'));
+  });
+
+  it('keeps a v1 entry that decrypts but does not map to a valid record', async () => {
+    await seedV1(key);
+    const { createdAt: _dropped, ...noCreatedAt } = CREDS[0]!;
+    secureStoreMock.__store.set('c1', await encryptRecord(noCreatedAt, key));
+    const result = await migrateV1(key);
+    expect(result.migrated).toBe(3);
+    expect(result.skipped).toBe(1);
+    expect(secureStoreMock.__store.has('c1')).toBe(true);
+    expect(JSON.parse(secureStoreMock.__store.get('credentialKeys') ?? '')).toEqual(['c1']);
+    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c2', 'n1', 'p1']);
+    // What was written decodes cleanly on the next read.
+    await expect(readVault(key)).resolves.toHaveLength(3);
+  });
+
+  it('aborts on an unexpected error before any deletion, so the next pass retries', async () => {
+    await seedV1(key);
+    const before = new Map(secureStoreMock.__store);
+    jest.spyOn(crypto, 'decryptRecord').mockImplementationOnce(() => {
+      throw new TypeError('native bridge exploded');
+    });
+    await expect(migrateV1(key)).rejects.toThrow('native bridge exploded');
+    expect(secureStoreMock.__store).toEqual(before);
+    expect(vaultExists()).toBe(false);
+
+    // Fourth read = the first entry (after the three registry probes).
+    const realGet = SecureStore.getItemAsync;
+    let reads = 0;
+    const getSpy = jest.spyOn(SecureStore, 'getItemAsync').mockImplementation(async (k, o) => {
+      reads += 1;
+      if (reads === 4) throw new Error('keystore unavailable');
+      return realGet(k, o);
+    });
+    await expect(migrateV1(key)).rejects.toThrow('keystore unavailable');
+    expect(secureStoreMock.__store).toEqual(before);
+    getSpy.mockRestore();
+
+    expect((await migrateV1(key)).migrated).toBe(4);
+  });
+
+  it('merges with a vault whose last commit was interrupted (vault.bin missing, .bak present)', async () => {
+    await seedV1(key);
+    const existing: VaultRecord = {
+      id: 'z9',
+      title: 'Only in vault',
+      template: 'custom',
+      fields: [],
+      pinned: false,
+      tags: [],
+      createdAt: T1,
+      updatedAt: T1,
+    };
+    fsMock.__files.set('file:///mock/documents/vault.bin.bak', await encodeVaultFile([existing], key, { kind: 'vault' }));
+    const result = await migrateV1(key);
+    expect(result.migrated).toBe(4);
+    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'n1', 'p1', 'z9']);
   });
 });

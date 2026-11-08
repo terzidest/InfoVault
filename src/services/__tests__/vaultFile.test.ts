@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system';
+import { gcm } from '@noble/ciphers/aes.js';
 import { hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
 import { generateVaultKey } from '../../utils/crypto';
 import {
@@ -8,6 +9,7 @@ import {
   commitVaultBytes,
   decodeVaultFile,
   encodeVaultFile,
+  isVaultRecord,
   readVault,
   removeVault,
   vaultExists,
@@ -184,10 +186,29 @@ describe('encodeVaultFile / decodeVaultFile', () => {
     }
   });
 
-  it('rejects a payload whose records are not records', async () => {
+  it('refuses to encode malformed records, and rejects a sealed payload whose records are not records', async () => {
     const bad = [{ id: 1, title: 'x' }] as unknown as VaultRecord[];
-    const bytes = await encodeVaultFile(bad, key, VAULT_HEADER);
+    await expect(encodeVaultFile(bad, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+    const missingTimestamps = [{ ...makeRecord(1), createdAt: undefined }] as unknown as VaultRecord[];
+    await expect(encodeVaultFile(missingTimestamps, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+
+    // Seal a bad payload by hand (same layout and AAD) to exercise the decode-side guard.
+    const headerBytes = utf8ToBytes(JSON.stringify(VAULT_HEADER));
+    const nonce = await Crypto.getRandomBytesAsync(12);
+    const aad = new Uint8Array([...utf8ToBytes('infovault-vault-file-v1'), ...headerBytes]);
+    const sealed = gcm(key, nonce, aad).encrypt(utf8ToBytes(JSON.stringify({ payloadVersion: 1, records: bad })));
+    const bytes = new Uint8Array([
+      ...utf8ToBytes('IVLT'),
+      1,
+      headerBytes.length >>> 8,
+      headerBytes.length & 0xff,
+      ...headerBytes,
+      ...nonce,
+      ...sealed,
+    ]);
     expect(() => decodeVaultFile(bytes, key)).toThrow(VaultFileFormatError);
+    expect(isVaultRecord(makeRecord(1))).toBe(true);
+    expect(isVaultRecord({ ...makeRecord(1), tags: [1] })).toBe(false);
   });
 });
 
@@ -234,9 +255,8 @@ describe('readVault / writeVault', () => {
     expect(await readVault(key)).toEqual(before);
   });
 
-  it('a failed move of .tmp into place leaves the previous file recoverable from .bak', async () => {
-    const before = makeRecords(2);
-    await writeVault(before, key);
+  it('a failed move of .tmp into place: the complete .tmp (newest) is recovered over .bak', async () => {
+    await writeVault(makeRecords(2), key);
 
     fsMock.__failNextMove('vault.bin.tmp');
     await expect(writeVault(makeRecords(9), key)).rejects.toThrow('simulated move failure');
@@ -244,11 +264,32 @@ describe('readVault / writeVault', () => {
     expect(fsMock.__files.has(BAK)).toBe(true);
     expect(fsMock.__files.has(TMP)).toBe(true);
 
-    // Recovery prefers .bak (the last known-good file) and restores it.
+    // .tmp decoded, so it is the newest complete file: restore it, drop .bak.
+    expect(await readVault(key)).toEqual(makeRecords(9));
+    expect(fsMock.__files.has(VAULT)).toBe(true);
+    expect(fsMock.__files.has(BAK)).toBe(false);
+    expect(fsMock.__files.has(TMP)).toBe(false);
+  });
+
+  it('a partial .tmp next to a .bak: .bak is restored and the partial .tmp dropped', async () => {
+    const before = makeRecords(2);
+    await writeVault(before, key);
+    const good = fsMock.__files.get(VAULT) ?? new Uint8Array();
+    fsMock.__files.delete(VAULT);
+    fsMock.__files.set(BAK, good);
+    const newer = await encodeVaultFile(makeRecords(9), key, VAULT_HEADER);
+    fsMock.__files.set(TMP, newer.subarray(0, newer.length - 20)); // truncated: fails the tag
+
     expect(await readVault(key)).toEqual(before);
     expect(fsMock.__files.has(VAULT)).toBe(true);
     expect(fsMock.__files.has(BAK)).toBe(false);
     expect(fsMock.__files.has(TMP)).toBe(false);
+  });
+
+  it('a .tmp that fails the tag with nothing behind it fails closed rather than reporting "no vault"', async () => {
+    const bytes = await encodeVaultFile(makeRecords(1), key, VAULT_HEADER);
+    fsMock.__files.set(TMP, bytes);
+    await expect(readVault(await generateVaultKey())).rejects.toThrow(VaultFileAuthError);
   });
 
   it('recovers a fully written .tmp when nothing else exists, and ignores a partial one', async () => {

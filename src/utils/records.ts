@@ -338,7 +338,7 @@ export const searchRecords = (records: readonly VaultRecord[], query: string): V
   );
 };
 
-const timestamp = (iso: string): number => {
+export const timestamp = (iso: string): number => {
   const ms = Date.parse(iso);
   return Number.isNaN(ms) ? 0 : ms;
 };

@@ -108,7 +108,7 @@ const isField = (value: unknown): value is Field =>
   typeof value.value === 'string' &&
   typeof value.kind === 'string';
 
-const isVaultRecord = (value: unknown): value is VaultRecord =>
+export const isVaultRecord = (value: unknown): value is VaultRecord =>
   isObject(value) &&
   typeof value.id === 'string' &&
   typeof value.title === 'string' &&
@@ -147,6 +147,10 @@ export const encodeVaultFile = async (
   const headerBytes = utf8ToBytes(JSON.stringify(header));
   if (headerBytes.length > MAX_HEADER_BYTES) {
     throw new VaultFileFormatError('Vault file header is too large');
+  }
+  // Last line of defence: never seal something that will not decode later.
+  if (!records.every(isVaultRecord)) {
+    throw new VaultFileFormatError('Refusing to write malformed records');
   }
   const plaintext = utf8ToBytes(JSON.stringify({ payloadVersion: PAYLOAD_VERSION, records }));
   const nonce = await Crypto.getRandomBytesAsync(NONCE_BYTES);
@@ -253,11 +257,13 @@ const readAndDecode = async (file: File, key: Uint8Array): Promise<VaultRecord[]
 /**
  * Returns the records, or null when there is no vault on disk at all.
  *
- * Recovery (see commitVaultBytes): with `vault.bin` missing, `.bak` is the
- * previous complete file and is restored. Failing that, a `.tmp` that decodes
- * is a completely written new file whose move never happened; it is restored
- * too. Anything else is left for the caller: a `.tmp` that does not decode is
- * a partial write and is not the vault.
+ * Recovery (see commitVaultBytes) when `vault.bin` is missing: a `.tmp` that
+ * decodes is the newest complete file (its move never happened; a partial
+ * write cannot pass the tag check), so it is restored first. Otherwise `.bak`
+ * is the previous complete file and is restored. A `.tmp` that does not decode
+ * with no `.bak` behind it is either a partial first-ever write or the wrong
+ * key: a format failure means partial (→ null), a tag failure is rethrown
+ * rather than guessed at.
  */
 export const readVault = async (key: Uint8Array): Promise<VaultRecord[] | null> => {
   const vault = vaultFile();
@@ -269,31 +275,28 @@ export const readVault = async (key: Uint8Array): Promise<VaultRecord[] | null> 
     return records;
   }
 
+  const tmp = tmpFile();
   const bak = bakFile();
+  let tmpError: unknown = null;
+  if (tmp.exists) {
+    try {
+      const records = await readAndDecode(tmp, key);
+      await tmp.move(vaultFile());
+      deleteIfExists(bakFile());
+      return records;
+    } catch (error) {
+      tmpError = error;
+    }
+  }
+
   if (bak.exists) {
     const records = await readAndDecode(bak, key);
-    await bak.move(vault);
+    await bak.move(vaultFile());
     deleteIfExists(tmpFile());
     return records;
   }
 
-  const tmp = tmpFile();
-  if (tmp.exists) {
-    let records: VaultRecord[];
-    try {
-      records = await readAndDecode(tmp, key);
-    } catch (error) {
-      if (error instanceof VaultFileAuthError) {
-        // Partial write under the right key, or the wrong key; either way
-        // there is nothing to recover.
-        throw error;
-      }
-      return null;
-    }
-    await tmp.move(vault);
-    return records;
-  }
-
+  if (tmpError instanceof VaultFileAuthError) throw tmpError;
   return null;
 };
 
