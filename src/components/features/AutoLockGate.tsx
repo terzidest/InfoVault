@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import useAuthStore from '../../store/authStore';
 import useSettingsStore from '../../store/settingsStore';
 import { navigationRef } from '../../navigation/appNavigator';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../theme/useTheme';
 
 // How often the idle timeout is evaluated while the app is foregrounded.
 const CHECK_INTERVAL_MS = 5_000;
@@ -19,6 +19,7 @@ interface Props {
 // evaluates the idle timeout while foregrounded, and stamps/checks activity
 // across background transitions. Mounted exactly once, above the navigator.
 const AutoLockGate: React.FC<Props> = ({ children }) => {
+  const { tokens } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const appStateRef = useRef(AppState.currentState);
   // Obscures the UI in the OS app switcher so snapshots never show vault
@@ -97,9 +98,9 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
     <View style={styles.root} onStartShouldSetResponderCapture={handleTouchCapture}>
       {children}
       {isObscured && (
-        <View style={styles.obscurer}>
-          <Ionicons name="lock-closed" size={48} color="#FFFFFF" />
-          <Text style={styles.obscurerText}>InfoVault</Text>
+        <View style={[styles.obscurer, { backgroundColor: tokens.colors.background }]}>
+          <Ionicons name="shield-checkmark-outline" size={48} color={tokens.colors.amber} />
+          <Text style={[tokens.type.barTitle, styles.obscurerText, { color: tokens.colors.text }]}>InfoVault</Text>
         </View>
       )}
     </View>
@@ -118,13 +119,8 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
   },
   obscurerText: {
-    fontSize: 18,
-    lineHeight: 28,
-    fontWeight: '600',
-    color: '#FFFFFF',
     marginTop: 16,
   },
 });
