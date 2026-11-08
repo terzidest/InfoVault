@@ -4,18 +4,17 @@
 const preset = require('jest-expo/android/jest-preset');
 
 // @noble/* ships ESM only, so it must be transformed like the RN/Expo packages.
+// The preset's allow-list is a single negative lookahead; add @noble to it.
+const ALLOW_LIST_PREFIX = '/node_modules/(?!(';
 const transformIgnorePatterns = preset.transformIgnorePatterns.map((pattern) =>
-  pattern.replace('react-native-svg)', 'react-native-svg|@noble/.*)')
+  pattern.startsWith(ALLOW_LIST_PREFIX)
+    ? pattern.replace(ALLOW_LIST_PREFIX, `${ALLOW_LIST_PREFIX}@noble/.*|`)
+    : pattern
 );
 
 module.exports = {
   preset: 'jest-expo/android',
   transformIgnorePatterns,
-  // Metro (SDK 52) resolves `@noble/ciphers/utils` by file; Jest honours the
-  // package `exports` map, which only lists `./utils.js`. Bridge the two.
-  moduleNameMapper: {
-    '^@noble/(ciphers|hashes)/([^.]+)$': '<rootDir>/node_modules/@noble/$1/$2.js',
-  },
   testMatch: ['<rootDir>/src/**/__tests__/**/*.test.ts'],
   testPathIgnorePatterns: ['/node_modules/', '/ios/', '/android/'],
   clearMocks: true,

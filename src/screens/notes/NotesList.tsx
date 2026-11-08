@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,6 +10,7 @@ import NoteListItem from '../../components/features/notes/NoteListItem';
 import SearchBar from '../../components/ui/SearchBar';
 import type { ScreenProps } from '../../types/navigation';
 import type { Note } from '../../types/models';
+import { runAfterInteractions } from '../../services/interactions';
 
 const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
   // Field-level selectors: a whole-store subscription re-renders this screen
@@ -34,7 +35,7 @@ const NotesList: React.FC<ScreenProps<'NotesList'>> = ({ navigation }) => {
       if (!isAuthenticated) return;
       // Defer the reload (SecureStore reads + decryption) until the
       // navigation transition has finished, so the animation stays smooth.
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = runAfterInteractions(() => {
         updateLastActive();
         loadNotes();
       });

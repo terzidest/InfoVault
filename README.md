@@ -36,7 +36,7 @@ InfoVault is a local-first, secure personal information manager built with React
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22.13+ (or 24.3+)
 - For device builds: Xcode (iOS) / Android SDK (Android)
 
 ### Installation
@@ -55,7 +55,7 @@ npm run ios        # build & run the iOS dev app
 npm run android    # build & run the Android dev app
 ```
 
-The app runs as a dev build, not in Expo Go: it targets Expo SDK 52, and the store versions of Expo Go only support the latest SDK. After changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
+The app runs as a dev build, not in Expo Go: it targets Expo SDK 58, and the store versions of Expo Go only support the latest SDK. After changing native dependencies, rebuild with `npm run ios` / `npm run android` rather than only reloading Metro.
 
 ### Android preview build (shareable APK)
 

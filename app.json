@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -30,7 +25,8 @@
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
       ],
-      "package": "com.terzidest.infovault"
+      "package": "com.terzidest.infovault",
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -49,9 +45,16 @@
           "faceIDPermission": "Allow InfoVault to use Face ID to unlock your vault."
         }
       ],
-      "./plugins/with-fmt-xcode26-patch",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
     ],
     "extra": {
       "eas": {

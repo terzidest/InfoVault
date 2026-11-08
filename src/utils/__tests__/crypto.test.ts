@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { bytesToHex, utf8ToBytes } from '@noble/ciphers/utils';
+import { bytesToHex, utf8ToBytes } from '@noble/ciphers/utils.js';
 import {
   CURRENT_KDF,
   LEGACY_KDF,

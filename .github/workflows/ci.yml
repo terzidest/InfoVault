@@ -25,7 +25,10 @@ jobs:
         run: npm run typecheck
 
       - name: Lint
-        run: npx eslint . --ext .js,.jsx,.ts,.tsx --max-warnings 0
+        run: npx eslint . --max-warnings 0
 
       - name: Test
         run: npm test -- --ci
+
+      - name: Bundle (Android)
+        run: npx expo export --platform android --output-dir /tmp/export-android

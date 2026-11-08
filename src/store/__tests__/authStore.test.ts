@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
-import { bytesToHex, utf8ToBytes } from '@noble/ciphers/utils';
-import { pbkdf2 } from '@noble/hashes/pbkdf2';
-import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
+import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import useAuthStore from '../authStore';
 import useCredentialsStore from '../credentialsStore';
 import * as crypto from '../../utils/crypto';
@@ -41,7 +41,7 @@ const lock = () => useAuthStore.getState().logout();
 // sealed under the same key, biometric copy = the key itself.
 const seedLegacyVault = async (password: string) => {
   const salt = await crypto.generateSalt();
-  const legacyKey = pbkdf2(sha256, utf8ToBytes(password), Buffer.from(salt, 'hex'), {
+  const legacyKey = pbkdf2(sha256, utf8ToBytes(password), hexToBytes(salt), {
     c: 100_000,
     dkLen: 32,
   });

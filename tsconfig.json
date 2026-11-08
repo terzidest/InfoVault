@@ -7,7 +7,10 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "jsx": "react-native"
+    "jsx": "react-native",
+    "types": [
+      "jest"
+    ]
   },
   "include": [
     "src/**/*",
