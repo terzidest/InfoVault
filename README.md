@@ -91,7 +91,7 @@ src/
 ├── store/           # Zustand stores (auth, settings, 3 domain stores)
 ├── services/        # Side-effect boundary: SecureStore, biometrics, clipboard
 ├── navigation/      # Typed native stack
-├── theme/           # Color palette (source of truth for JS; mirrored in Tailwind)
+├── theme/           # Color palette
 ├── utils/           # Pure functions: crypto, validation, masking, formatting
 ├── hooks/           # useAuth
 └── types/           # Shared models, navigation, storage types
@@ -105,7 +105,6 @@ src/
 - **Expo Local Authentication** — biometric gate
 - **Zustand** — state management
 - **React Navigation** (native stack)
-- **NativeWind** — Tailwind-style styling
 - **Lottie** — unlock animation
 
 ## Roadmap

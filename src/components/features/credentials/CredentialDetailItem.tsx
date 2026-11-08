@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obfuscateText } from '../../../utils/masking';
 import { colors } from '../../../theme/colors';
@@ -32,32 +32,32 @@ const CredentialDetailItem: React.FC<CredentialDetailItemProps> = ({
   const displayValue = isSensitive && !isRevealed ? obfuscateText(value) : value;
 
   return (
-    <View className="mb-4">
-      <View className="flex-row items-center mb-1">
-        <Text className="text-sm text-gray-600 mr-2">{label}</Text>
+    <View style={styles.container}>
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>{label}</Text>
         {isSensitive && (
-          <View className="bg-secondary px-1.5 py-0.5 rounded">
-            <Text className="text-xs font-semibold text-dark">Sensitive</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Sensitive</Text>
           </View>
         )}
       </View>
 
-      <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2.5 min-h-11">
+      <View style={styles.valueRow}>
         <Text
-          className={`
-            flex-1 text-base
-            ${isSensitive ? 'font-mono tracking-wide' : ''}
-            ${!value ? 'italic text-gray-400' : 'text-dark'}
-          `}
+          style={[
+            styles.value,
+            isSensitive && styles.valueMono,
+            !value ? styles.valueEmpty : styles.valueSet,
+          ]}
           selectable={!isSensitive || isRevealed}
         >
           {value ? displayValue : 'Not set'}
         </Text>
 
-        <View className="flex-row items-center">
+        <View style={styles.actions}>
           {isSensitive && (
             <TouchableOpacity
-              className="p-1 ml-2"
+              style={styles.actionButton}
               onPress={toggleReveal}
               accessibilityRole="button"
               accessibilityLabel={isRevealed ? `Hide ${label}` : `Reveal ${label}`}
@@ -72,7 +72,7 @@ const CredentialDetailItem: React.FC<CredentialDetailItemProps> = ({
 
           {!!value && onCopy && (
             <TouchableOpacity
-              className="p-1 ml-2 bg-white rounded-full"
+              style={styles.copyButton}
               onPress={onCopy}
               accessibilityRole="button"
               accessibilityLabel={`Copy ${label}`}
@@ -85,5 +85,73 @@ const CredentialDetailItem: React.FC<CredentialDetailItemProps> = ({
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4B5563',
+    marginRight: 8,
+  },
+  badge: {
+    backgroundColor: colors.secondary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 44,
+  },
+  value: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  valueMono: {
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+    letterSpacing: 0.4,
+  },
+  valueEmpty: {
+    fontStyle: 'italic',
+    color: '#9CA3AF',
+  },
+  valueSet: {
+    color: colors.dark,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  copyButton: {
+    padding: 4,
+    marginLeft: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+  },
+});
 
 export default CredentialDetailItem;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, InteractionManager } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, InteractionManager, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -45,20 +45,16 @@ const getDailyTip = (): string => {
 // every card on every Home re-render.
 const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, onPress, color, description }) => (
   <TouchableOpacity
-    className="bg-white rounded-lg p-4 mb-3 shadow-sm border-l-4"
-    style={{ borderLeftColor: color }}
+    style={[styles.categoryCard, { borderLeftColor: color }]}
     onPress={onPress}
   >
-    <View className="flex-row items-center">
-      <View
-        className="w-12 h-12 rounded-full justify-center items-center mr-4"
-        style={{ backgroundColor: color + '20' }}
-      >
+    <View style={styles.categoryRow}>
+      <View style={[styles.categoryIcon, { backgroundColor: color + '20' }]}>
         <Ionicons name={icon} size={24} color={color} />
       </View>
-      <View className="flex-1">
-        <Text className="text-base font-medium text-dark">{title}</Text>
-        {description && <Text className="text-xs text-gray-500 mt-0.5">{description}</Text>}
+      <View style={styles.categoryBody}>
+        <Text style={styles.categoryTitle}>{title}</Text>
+        {description && <Text style={styles.categoryDescription}>{description}</Text>}
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.muted} />
     </View>
@@ -99,30 +95,30 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const navigateToNotes = () => navigation.navigate('NotesList');
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      <View className="mx-4 mt-4 mb-6 bg-white rounded-lg p-4 shadow-sm">
-        <View className="flex-row">
-          <View className="flex-1 items-center border-r border-gray-100">
-            <Text className="text-2xl font-bold text-primary mb-1">{credentials.length}</Text>
-            <Text className="text-xs text-gray-600">Credentials</Text>
+    <ScrollView style={styles.screen}>
+      <View style={styles.statsCard}>
+        <View style={styles.statsRow}>
+          <View style={[styles.stat, styles.statDivider]}>
+            <Text style={[styles.statValue, { color: colors.primary }]}>{credentials.length}</Text>
+            <Text style={styles.statLabel}>Credentials</Text>
           </View>
-          <View className="flex-1 items-center border-r border-gray-100">
-            <Text className="text-2xl font-bold text-secondary mb-1">{personalInfo.length}</Text>
-            <Text className="text-xs text-gray-600">IDs & Docs</Text>
+          <View style={[styles.stat, styles.statDivider]}>
+            <Text style={[styles.statValue, { color: colors.secondary }]}>{personalInfo.length}</Text>
+            <Text style={styles.statLabel}>IDs & Docs</Text>
           </View>
-          <View className="flex-1 items-center">
-            <Text className="text-2xl font-bold text-success mb-1">{notes.length}</Text>
-            <Text className="text-xs text-gray-600">Notes</Text>
+          <View style={styles.stat}>
+            <Text style={[styles.statValue, { color: colors.success }]}>{notes.length}</Text>
+            <Text style={styles.statLabel}>Notes</Text>
           </View>
         </View>
       </View>
 
-      <View className="mx-4 mb-3 flex-row items-center">
-        <View className="w-1 h-5 bg-secondary rounded-full mr-2" />
-        <Text className="text-lg font-semibold text-dark">Categories</Text>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionAccent} />
+        <Text style={styles.sectionTitle}>Categories</Text>
       </View>
 
-      <View className="mx-4">
+      <View style={styles.categories}>
         <CategoryCard
           title="Credentials"
           description="Store website logins and passwords"
@@ -149,15 +145,128 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
       </View>
 
       <Card
-        className="mx-4 mt-4 mb-8"
+        style={styles.tipCard}
         variant="accent"
         icon="bulb-outline"
         title="Tip of the day"
       >
-        <Text className="text-sm text-gray-600">{getDailyTip()}</Text>
+        <Text style={styles.tipText}>{getDailyTip()}</Text>
       </Card>
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  statsCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    borderRightWidth: 1,
+    borderRightColor: '#F3F4F6',
+  },
+  statValue: {
+    fontSize: 24,
+    lineHeight: 32,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#4B5563',
+  },
+  sectionHeader: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionAccent: {
+    width: 4,
+    height: 20,
+    backgroundColor: colors.secondary,
+    borderRadius: 9999,
+    marginRight: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  categories: {
+    marginHorizontal: 16,
+  },
+  categoryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  categoryBody: {
+    flex: 1,
+  },
+  categoryTitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '500',
+    color: colors.dark,
+  },
+  categoryDescription: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  tipCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 32,
+  },
+  tipText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4B5563',
+  },
+});
 
 export default Home;

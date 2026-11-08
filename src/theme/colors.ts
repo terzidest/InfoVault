@@ -1,6 +1,4 @@
 // Single source of truth for colors used from JS (style props, icon colors).
-// KEEP IN SYNC with tailwind.config.js — NativeWind classes can't read TS
-// constants, so the tailwind theme mirrors these values.
 export const colors = {
   primary: '#006E90',
   secondary: '#FFC107',

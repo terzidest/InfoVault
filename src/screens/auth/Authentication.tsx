@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
 import useAuthStore from '../../store/authStore';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import { colors } from '../../theme/colors';
 import type { ScreenProps } from '../../types/navigation';
 
 // The lock animation is 40 frames @ 10fps (4s); played at 3x it lands ~1.3s.
@@ -83,10 +84,10 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View className="flex-1 bg-light justify-center px-5 pb-16">
-        <View className="items-center">
-          <Text className="text-2xl font-bold text-primary mb-2">InfoVault</Text>
-          <Text className="text-base text-dark mb-4 text-center">
+      <View style={styles.screen}>
+        <View style={styles.content}>
+          <Text style={styles.title}>InfoVault</Text>
+          <Text style={styles.subtitle}>
             {biometricEnabled
               ? 'Unlock with biometrics, or enter your master password'
               : 'Enter your master password to unlock your vault'}
@@ -103,7 +104,7 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
             />
           </View>
 
-          <View className="w-full max-w-[320px]">
+          <View style={styles.form}>
             {biometricEnabled && (
               <Button
                 onPress={handleBiometric}
@@ -111,7 +112,7 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
                 variant="outline"
                 isLoading={isLoading}
                 disabled={isLoading || isAuthenticated}
-                className="mb-3"
+                style={styles.biometricButton}
               >
                 Use biometrics
               </Button>
@@ -139,5 +140,39 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
     </KeyboardAvoidingView>
   );
 };
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.light,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 64,
+  },
+  content: {
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 24,
+    lineHeight: 32,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: colors.dark,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  form: {
+    width: '100%',
+    maxWidth: 320,
+  },
+  biometricButton: {
+    marginBottom: 12,
+  },
+});
 
 export default Authentication;

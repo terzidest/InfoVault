@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../theme/colors';
 
 type CardVariant = 'default' | 'outlined' | 'elevated' | 'accent';
 
@@ -10,7 +11,6 @@ interface CardProps {
   variant?: CardVariant;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
-  className?: string;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
   iconColor?: string;
 }
@@ -21,30 +21,14 @@ const Card: React.FC<CardProps> = ({
   variant = 'default',
   onPress,
   style,
-  className,
   icon,
   iconColor,
   ...props
 }) => {
-  const getCardClassNames = (): string => {
-    const baseClasses = 'rounded-lg my-2 overflow-hidden';
-
-    switch (variant) {
-      case 'outlined':
-        return `${baseClasses} bg-white border border-gray-200`;
-      case 'elevated':
-        return `${baseClasses} bg-white shadow-md`;
-      case 'accent':
-        return `${baseClasses} bg-white border-l-4 border-secondary shadow-sm`;
-      default:
-        return `${baseClasses} bg-white`;
-    }
-  };
-
   const renderContent = () => (
-    <View className="p-4">
+    <View style={styles.content}>
       {(title || icon) && (
-        <View className="flex-row items-center mb-2">
+        <View style={styles.header}>
           {icon && (
             <Ionicons
               name={icon}
@@ -54,7 +38,7 @@ const Card: React.FC<CardProps> = ({
             />
           )}
           {title && (
-            <Text className="text-base font-semibold text-dark">{title}</Text>
+            <Text style={styles.title}>{title}</Text>
           )}
         </View>
       )}
@@ -62,13 +46,12 @@ const Card: React.FC<CardProps> = ({
     </View>
   );
 
-  const cardClassNames = `${getCardClassNames()} ${className || ''}`;
+  const cardStyle = [styles.base, variantStyles[variant], style];
 
   if (onPress) {
     return (
       <TouchableOpacity
-        className={cardClassNames}
-        style={style}
+        style={cardStyle}
         onPress={onPress}
         activeOpacity={0.8}
         {...props}
@@ -79,10 +62,57 @@ const Card: React.FC<CardProps> = ({
   }
 
   return (
-    <View className={cardClassNames} style={style} {...props}>
+    <View style={cardStyle} {...props}>
       {renderContent()}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  base: {
+    borderRadius: 8,
+    marginVertical: 8,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  content: {
+    padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+});
+
+const variantStyles = StyleSheet.create<Record<CardVariant, ViewStyle>>({
+  default: {},
+  outlined: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  elevated: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  accent: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.secondary,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+});
 
 export default Card;

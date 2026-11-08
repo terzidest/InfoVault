@@ -3,11 +3,13 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
+  StyleSheet,
   StyleProp,
   ViewStyle,
   TextStyle,
   TouchableOpacityProps,
 } from 'react-native';
+import { colors } from '../../theme/colors';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'outlineSecondary' | 'danger' | 'text';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -21,7 +23,6 @@ interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
   size?: ButtonSize;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
-  className?: string;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -33,74 +34,26 @@ const Button: React.FC<ButtonProps> = ({
   size = 'medium',
   style,
   textStyle,
-  className,
   ...props
 }) => {
-  const getButtonClasses = (): string => {
-    let baseClasses = 'rounded-lg items-center justify-center flex-row shadow-sm';
-
-    const sizeClasses: Record<ButtonSize, string> = {
-      small: 'py-1.5 px-3',
-      medium: 'py-2.5 px-4',
-      large: 'py-3.5 px-5',
-    };
-    baseClasses += ` ${sizeClasses[size]}`;
-
-    const variantClasses: Record<ButtonVariant, string> = {
-      primary: 'bg-primary',
-      secondary: 'bg-secondary',
-      outline: 'bg-transparent border border-primary',
-      outlineSecondary: 'bg-transparent border border-secondary',
-      danger: 'bg-danger',
-      text: 'bg-transparent',
-    };
-    baseClasses += ` ${variantClasses[variant]}`;
-
-    if (disabled || isLoading) {
-      baseClasses += ' opacity-50';
-    }
-
-    return baseClasses;
-  };
-
-  const getTextClasses = (): string => {
-    let baseClasses = 'font-semibold';
-
-    const sizeClasses: Record<ButtonSize, string> = {
-      small: 'text-xs',
-      medium: 'text-sm',
-      large: 'text-base',
-    };
-    baseClasses += ` ${sizeClasses[size]}`;
-
-    const variantClasses: Record<ButtonVariant, string> = {
-      primary: 'text-white',
-      secondary: 'text-dark',
-      outline: 'text-primary',
-      outlineSecondary: 'text-secondary',
-      danger: 'text-white',
-      text: 'text-primary',
-    };
-    baseClasses += ` ${variantClasses[variant]}`;
-
-    return baseClasses;
-  };
-
-  const buttonClasses = `${getButtonClasses()} ${className || ''}`;
-
   const indicatorColor =
     variant === 'outline' || variant === 'text' || variant === 'outlineSecondary'
       ? variant === 'outlineSecondary'
-        ? '#FFC107'
-        : '#006E90'
+        ? colors.secondary
+        : colors.primary
       : variant === 'secondary'
-        ? '#333333'
-        : '#FFFFFF';
+        ? colors.dark
+        : colors.light;
 
   return (
     <TouchableOpacity
-      className={buttonClasses}
-      style={style}
+      style={[
+        styles.base,
+        buttonSizeStyles[size],
+        buttonVariantStyles[variant],
+        (disabled || isLoading) && styles.disabled,
+        style,
+      ]}
       onPress={onPress}
       disabled={disabled || isLoading}
       activeOpacity={0.7}
@@ -109,12 +62,62 @@ const Button: React.FC<ButtonProps> = ({
       {isLoading ? (
         <ActivityIndicator size="small" color={indicatorColor} />
       ) : (
-        <Text className={getTextClasses()} style={textStyle}>
+        <Text style={[styles.text, textSizeStyles[size], textVariantStyles[variant], textStyle]}>
           {children}
         </Text>
       )}
     </TouchableOpacity>
   );
 };
+
+const styles = StyleSheet.create({
+  base: {
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  text: {
+    fontWeight: '600',
+  },
+});
+
+const buttonSizeStyles = StyleSheet.create<Record<ButtonSize, ViewStyle>>({
+  small: { paddingVertical: 6, paddingHorizontal: 12 },
+  medium: { paddingVertical: 10, paddingHorizontal: 16 },
+  large: { paddingVertical: 14, paddingHorizontal: 20 },
+});
+
+const buttonVariantStyles = StyleSheet.create<Record<ButtonVariant, ViewStyle>>({
+  primary: { backgroundColor: colors.primary },
+  secondary: { backgroundColor: colors.secondary },
+  outline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.primary },
+  outlineSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.secondary },
+  danger: { backgroundColor: colors.danger },
+  text: { backgroundColor: 'transparent' },
+});
+
+const textSizeStyles = StyleSheet.create<Record<ButtonSize, TextStyle>>({
+  small: { fontSize: 12, lineHeight: 16 },
+  medium: { fontSize: 14, lineHeight: 20 },
+  large: { fontSize: 16, lineHeight: 24 },
+});
+
+const textVariantStyles = StyleSheet.create<Record<ButtonVariant, TextStyle>>({
+  primary: { color: '#FFFFFF' },
+  secondary: { color: colors.dark },
+  outline: { color: colors.primary },
+  outlineSecondary: { color: colors.secondary },
+  danger: { color: '#FFFFFF' },
+  text: { color: colors.primary },
+});
 
 export default Button;
