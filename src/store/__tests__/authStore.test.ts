@@ -16,6 +16,7 @@ const secureStoreMock = SecureStore as unknown as {
   __reset: () => void;
   __setAuthGate: (mode: 'allow' | 'deny' | 'cancel') => void;
   __failNextSet: (key: string) => void;
+  __authGatedWrites: () => number;
 };
 
 const HEADER_KEY = 'vaultHeader';
@@ -67,6 +68,7 @@ beforeEach(() => {
     encryptionKey: null,
     biometricAvailable: false,
     biometricEnabled: false,
+    biometricRepairNeeded: false,
   });
   silenceConsole();
 });
@@ -230,16 +232,61 @@ describe('biometrics', () => {
   it('self-heals an invalidated keystore entry on the next password unlock', async () => {
     await useAuthStore.getState().setupMasterPassword('fresh-pass-123');
     await useAuthStore.getState().enableBiometricUnlock();
+    expect(secureStoreMock.__authGatedWrites()).toBe(1);
     lock();
     // OS invalidated the entry (enrollment change): gated read returns nothing.
     secureStoreMock.__store.delete(BIOMETRIC_KEY_STORE);
     expect(await useAuthStore.getState().unlockWithBiometrics()).toBe(false);
+    expect(useAuthStore.getState().biometricRepairNeeded).toBe(true);
     await useAuthStore.getState().init();
     expect(await useAuthStore.getState().unlockWithPassword('fresh-pass-123')).toBe(true);
     await Promise.resolve(); // the re-store is fire-and-forget
+    await Promise.resolve();
     expect(secureStoreMock.__store.has(BIOMETRIC_KEY_STORE)).toBe(true);
+    expect(secureStoreMock.__authGatedWrites()).toBe(2); // exactly one repair write
+    expect(useAuthStore.getState().biometricRepairNeeded).toBe(false);
     lock();
     expect(await useAuthStore.getState().unlockWithBiometrics()).toBe(true);
+  });
+
+  it('a normal password unlock never writes the biometric copy (no prompt on Home)', async () => {
+    await useAuthStore.getState().setupMasterPassword('fresh-pass-123');
+    await useAuthStore.getState().enableBiometricUnlock();
+    expect(secureStoreMock.__authGatedWrites()).toBe(1);
+    for (let i = 0; i < 3; i += 1) {
+      lock();
+      await useAuthStore.getState().init();
+      expect(await useAuthStore.getState().unlockWithPassword('fresh-pass-123')).toBe(true);
+      await Promise.resolve();
+    }
+    expect(secureStoreMock.__authGatedWrites()).toBe(1);
+  });
+
+  it('a dismissed biometric prompt is not treated as a broken entry', async () => {
+    await useAuthStore.getState().setupMasterPassword('fresh-pass-123');
+    await useAuthStore.getState().enableBiometricUnlock();
+    lock();
+    secureStoreMock.__setAuthGate('cancel');
+    expect(await useAuthStore.getState().unlockWithBiometrics()).toBe(false);
+    expect(useAuthStore.getState().biometricRepairNeeded).toBe(false);
+    secureStoreMock.__setAuthGate('allow');
+    await useAuthStore.getState().init();
+    expect(await useAuthStore.getState().unlockWithPassword('fresh-pass-123')).toBe(true);
+    await Promise.resolve();
+    expect(secureStoreMock.__authGatedWrites()).toBe(1);
+  });
+
+  it('an unreadable entry (non-cancel error) queues a repair; disabling biometrics clears it', async () => {
+    await useAuthStore.getState().setupMasterPassword('fresh-pass-123');
+    await useAuthStore.getState().enableBiometricUnlock();
+    lock();
+    jest.spyOn(SecureStore, 'getItemAsync').mockRejectedValueOnce(new Error('Could not decrypt the item'));
+    expect(await useAuthStore.getState().unlockWithBiometrics()).toBe(false);
+    expect(useAuthStore.getState().biometricRepairNeeded).toBe(true);
+    await useAuthStore.getState().init();
+    await useAuthStore.getState().unlockWithPassword('fresh-pass-123');
+    await useAuthStore.getState().disableBiometricUnlock();
+    expect(useAuthStore.getState().biometricRepairNeeded).toBe(false);
   });
 
   it('disable removes the copy and the flag', async () => {

@@ -3,6 +3,7 @@
 const store = new Map();
 let authGate = 'allow'; // 'allow' | 'deny' (entry invalidated → null) | 'cancel' (prompt dismissed → throws)
 let failSetKeys = new Set();
+let authGatedWrites = 0;
 
 module.exports = {
   // Lets `import * as X` hand every importer this same object (no interop copy),
@@ -18,7 +19,10 @@ module.exports = {
     return store.has(key) ? store.get(key) : null;
   },
 
-  async setItemAsync(key, value) {
+  async setItemAsync(key, value, options) {
+    // On Android an auth-gated write runs the cipher through BiometricPrompt,
+    // i.e. it prompts the user. Count them so tests can assert "no prompt".
+    if (options && options.requireAuthentication) authGatedWrites += 1;
     if (failSetKeys.has(key)) {
       failSetKeys.delete(key);
       throw new Error(`simulated write failure for ${key}`);
@@ -36,6 +40,10 @@ module.exports = {
     store.clear();
     authGate = 'allow';
     failSetKeys = new Set();
+    authGatedWrites = 0;
+  },
+  __authGatedWrites() {
+    return authGatedWrites;
   },
   __setAuthGate(mode) {
     authGate = mode;
