@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -10,6 +10,7 @@ import Button from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatters';
 import type { ScreenProps } from '../../types/navigation';
 import type { Note } from '../../types/models';
+import { runAfterInteractions } from '../../services/interactions';
 
 const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
   const { id } = route.params;
@@ -40,7 +41,7 @@ const ViewNote: React.FC<ScreenProps<'ViewNote'>> = ({ route, navigation }) => {
       // it), then re-read storage only after the push animation finishes so
       // decryption work never competes with the transition.
       setNote(getNoteById(id) ?? null);
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = runAfterInteractions(() => {
         if (cancelled) return;
         loadNotes()
           .then(() => {

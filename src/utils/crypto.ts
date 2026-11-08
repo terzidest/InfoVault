@@ -1,9 +1,9 @@
 import * as Crypto from 'expo-crypto';
-import { gcm } from '@noble/ciphers/aes';
-import { utf8ToBytes, bytesToUtf8, bytesToHex, hexToBytes } from '@noble/ciphers/utils';
-import { argon2idAsync } from '@noble/hashes/argon2';
-import { pbkdf2Async } from '@noble/hashes/pbkdf2';
-import { sha256 } from '@noble/hashes/sha2';
+import { gcm } from '@noble/ciphers/aes.js';
+import { utf8ToBytes, bytesToUtf8, bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
+import { argon2idAsync } from '@noble/hashes/argon2.js';
+import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 // AES-256-GCM whole-record encryption under a random vault key, which is
 // itself wrapped (AES-256-GCM) under a key derived from the master password.

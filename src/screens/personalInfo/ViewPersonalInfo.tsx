@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +14,7 @@ import Button from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatters';
 import type { ScreenProps } from '../../types/navigation';
 import type { PersonalInfo } from '../../types/models';
+import { runAfterInteractions } from '../../services/interactions';
 
 const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, navigation }) => {
   const { id } = route.params;
@@ -45,7 +46,7 @@ const ViewPersonalInfo: React.FC<ScreenProps<'ViewPersonalInfo'>> = ({ route, na
       // it), then re-read storage only after the push animation finishes so
       // decryption work never competes with the transition.
       setInfo(getPersonalInfoById(id) ?? null);
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = runAfterInteractions(() => {
         if (cancelled) return;
         loadPersonalInfo()
           .then(() => {

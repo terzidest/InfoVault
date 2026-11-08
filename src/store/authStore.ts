@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import { bytesToHex, hexToBytes } from '@noble/ciphers/utils';
+import { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import {
   CURRENT_KDF,
   LEGACY_KDF,

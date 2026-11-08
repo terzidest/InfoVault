@@ -22,11 +22,7 @@ const App: React.FC = () => {
   if (!isInitialized) {
     return (
       <View style={styles.loading}>
-        <StatusBar
-          backgroundColor="#006E90"
-          barStyle="light-content"
-          translucent={true}
-        />
+        <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" color="#006E90" />
         <Text style={styles.loadingText}>Loading InfoVault...</Text>
       </View>
@@ -35,11 +31,7 @@ const App: React.FC = () => {
 
   return (
     <SafeAreaProvider>
-      <StatusBar
-        backgroundColor="#006E90"
-        barStyle="light-content"
-        translucent={true}
-      />
+      <StatusBar barStyle="light-content" />
       <AutoLockGate>
         <AppNavigator />
       </AutoLockGate>

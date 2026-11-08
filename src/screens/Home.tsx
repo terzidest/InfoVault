@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, InteractionManager, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,6 +12,7 @@ import useSettingsStore from '../store/settingsStore';
 import Card from '../components/ui/Card';
 import { colors } from '../theme/colors';
 import type { ScreenProps } from '../types/navigation';
+import { runAfterInteractions } from '../services/interactions';
 
 interface CategoryCardProps {
   title: string;
@@ -79,7 +80,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
       if (!isAuthenticated) return;
       // Defer store reloads (SecureStore reads + per-record decryption) until
       // the navigation transition has finished, so the animation stays smooth.
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = runAfterInteractions(() => {
         updateLastActive();
         initSettings();
         loadCredentials();
