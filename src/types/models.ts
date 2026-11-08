@@ -43,9 +43,13 @@ export interface PersonalInfo {
 
 export type PersonalInfoInput = Omit<PersonalInfo, 'id' | 'createdAt' | 'updatedAt'>;
 
-export type ThemeMode = 'light' | 'dark';
+// 'system' follows the OS appearance; the other two pin the scheme.
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface Settings {
+  // Schema version of the persisted blob. v1 blobs have none (see
+  // settingsStore.migrateStoredSettings).
+  version: number;
   theme: ThemeMode;
   autoLockTimeout: number;
   maskSensitiveData: boolean;
