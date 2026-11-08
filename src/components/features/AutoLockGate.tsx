@@ -26,13 +26,13 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
   const [isObscured, setIsObscured] = useState(AppState.currentState !== 'active');
 
   // Single authority for lock-driven navigation: when the vault locks,
-  // collapse the entire stack to Authentication exactly once, synchronously
+  // collapse the entire stack to Unlock exactly once, synchronously
   // with the store update (a useEffect fires a commit later and can race
   // in-flight navigation). No screen may navigate on lock itself.
   useEffect(() => {
     return useAuthStore.subscribe((state, prevState) => {
       if (prevState.isAuthenticated && !state.isAuthenticated && navigationRef.isReady()) {
-        navigationRef.resetRoot({ index: 0, routes: [{ name: 'Authentication' }] });
+        navigationRef.resetRoot({ index: 0, routes: [{ name: 'Unlock' }] });
       }
     });
   }, []);

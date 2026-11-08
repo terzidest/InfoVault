@@ -3,7 +3,7 @@ import type { TemplateId } from './models';
 
 export type RootStackParamList = {
   SetupMasterPassword: undefined;
-  Authentication: undefined;
+  Unlock: undefined;
   Home: undefined;
   Record: { id: string };
   AddEditRecord: { id?: string; template?: TemplateId } | undefined;
