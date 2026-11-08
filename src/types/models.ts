@@ -53,6 +53,8 @@ export interface Settings {
   theme: ThemeMode;
   autoLockTimeout: number;
   maskSensitiveData: boolean;
+  // Home list order. Optional in older blobs; settingsStore fills the default.
+  sortMode: SortMode;
 }
 
 export interface AuthTypes {

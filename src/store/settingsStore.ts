@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   autoLockTimeout: 300000,
   maskSensitiveData: true,
+  sortMode: 'lastUsed',
 };
 
 // One-shot migration of a persisted blob to the current schema.

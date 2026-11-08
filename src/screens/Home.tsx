@@ -1,273 +1,235 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+// Home: search first. Brand row with lock and settings, the search field,
+// a horizontal strip of pinned records (only while not searching), a sort
+// toggle and the record list. Everything the user needs most is one tap
+// after unlock: the row's copy button, a pinned card, or the search box.
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import type { ListRenderItemInfo } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import useAuth from '../hooks/useAuth';
-import useCredentialsStore from '../store/credentialsStore';
-import usePersonalInfoStore from '../store/personalInfoStore';
-import useNotesStore from '../store/notesStore';
+import useRecordsStore from '../store/recordsStore';
 import useSettingsStore from '../store/settingsStore';
-
-import Card from '../components/ui/Card';
-import { colors } from '../theme/colors';
+import { useTheme } from '../theme/useTheme';
+import { ActionButton, BarTitle, Body, Eyebrow, IconButton, Mono, Screen, Secondary, TextField } from '../components/ui';
+import { PINNED_CARD_WIDTH, PinnedCard, RecordRow } from '../components/features/records';
+import { searchRecords, sortRecords } from '../utils/records';
 import type { ScreenProps } from '../types/navigation';
-import { runAfterInteractions } from '../services/interactions';
+import type { SortMode, VaultRecord } from '../types/models';
 
-interface CategoryCardProps {
-  title: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  onPress: () => void;
-  color: string;
-  description?: string;
-}
+const FAB_SIZE = 58;
+const PINNED_GAP = 12;
+// Rows past this index enter together; a long list must not trickle in.
+const MAX_STAGGERED_ROWS = 10;
 
-// Rotated daily by day-of-year; keeps "tip of the day" honest without a backend.
-const SECURITY_TIPS = [
-  'Use a strong, unique password for every account — the generator can make one for you.',
-  'Enable biometric unlock in Settings for fast access without weakening your master password.',
-  'Never share your master password. InfoVault cannot recover it if you forget it.',
-  'Review your stored credentials occasionally and delete accounts you no longer use.',
-  'A longer password beats a complex short one — aim for 16 characters or more.',
-  'Turn on auto-lock with a short timeout if you often leave your phone unattended.',
-  'Avoid reusing your master password anywhere else — it protects everything in this vault.',
-  'Update passwords for critical accounts (email, banking) at least once a year.',
-] as const;
-
-const getDailyTip = (): string => {
-  const now = new Date();
-  const startOfYear = new Date(now.getFullYear(), 0, 0);
-  const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86_400_000);
-  return SECURITY_TIPS[dayOfYear % SECURITY_TIPS.length] ?? SECURITY_TIPS[0];
+const SORT_LABEL: Record<SortMode, string> = {
+  lastUsed: 'last used first ⇅',
+  az: 'A–Z ⇅',
 };
 
-// Module scope, not inside Home: defining a component inside the render body
-// creates a new component type each render, forcing a full unmount/remount of
-// every card on every Home re-render.
-const CategoryCard: React.FC<CategoryCardProps> = ({ title, icon, onPress, color, description }) => (
-  <TouchableOpacity
-    style={[styles.categoryCard, { borderLeftColor: color }]}
-    onPress={onPress}
-  >
-    <View style={styles.categoryRow}>
-      <View style={[styles.categoryIcon, { backgroundColor: color + '20' }]}>
-        <Ionicons name={icon} size={24} color={color} />
-      </View>
-      <View style={styles.categoryBody}>
-        <Text style={styles.categoryTitle}>{title}</Text>
-        {description && <Text style={styles.categoryDescription}>{description}</Text>}
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-    </View>
-  </TouchableOpacity>
+const nextSortMode = (mode: SortMode): SortMode => (mode === 'lastUsed' ? 'az' : 'lastUsed');
+
+const countLabel = (n: number): string => `${n} ${n === 1 ? 'item' : 'items'}`;
+
+interface RowProps {
+  record: VaultRecord;
+  index: number;
+  reduceMotion: boolean;
+  stagger: number;
+  onPress: (record: VaultRecord) => void;
+}
+
+// Module scope: a component defined inside Home would remount every row on
+// each Home render. The entering animation runs once per mount (first paint
+// and new search hits), never on reorder.
+const Row: React.FC<RowProps> = ({ record, index, reduceMotion, stagger, onPress }) => (
+  <Animated.View entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(index, MAX_STAGGERED_ROWS) * stagger)}>
+    <RecordRow record={record} onPress={onPress} divider={index > 0} />
+  </Animated.View>
 );
 
 const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
-  const { isAuthenticated, updateLastActive } = useAuth();
-  // Field-level selectors: whole-store subscriptions re-render on every set()
-  // to that store (isLoading flips included), even while unfocused beneath
-  // other stack screens. Select only what this screen renders or calls.
-  const credentials = useCredentialsStore((s) => s.credentials);
-  const loadCredentials = useCredentialsStore((s) => s.loadCredentials);
-  const personalInfo = usePersonalInfoStore((s) => s.personalInfo);
-  const loadPersonalInfo = usePersonalInfoStore((s) => s.loadPersonalInfo);
-  const notes = useNotesStore((s) => s.notes);
-  const loadNotes = useNotesStore((s) => s.loadNotes);
-  const initSettings = useSettingsStore((s) => s.initSettings);
+  const { tokens } = useTheme();
+  const reduceMotion = useReducedMotion();
+  const { isAuthenticated, updateLastActive, logout } = useAuth();
+  // Field-level selectors: never re-render Home for isLoading flips.
+  const records = useRecordsStore((s) => s.records);
+  const sortMode = useSettingsStore((s) => s.settings.sortMode);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const [query, setQuery] = useState('');
 
   useFocusEffect(
-    React.useCallback(() => {
-      if (!isAuthenticated) return;
-      // Defer store reloads (SecureStore reads + per-record decryption) until
-      // the navigation transition has finished, so the animation stays smooth.
-      const task = runAfterInteractions(() => {
-        updateLastActive();
-        initSettings();
-        loadCredentials();
-        loadPersonalInfo();
-        loadNotes();
-      });
-      return () => task.cancel();
-    }, [isAuthenticated, updateLastActive, initSettings, loadCredentials, loadPersonalInfo, loadNotes])
+    useCallback(() => {
+      if (isAuthenticated) updateLastActive();
+    }, [isAuthenticated, updateLastActive])
   );
 
-  const navigateToCredentials = () => navigation.navigate('CredentialsList');
-  const navigateToPersonalInfo = () => navigation.navigate('PersonalInfoList');
-  const navigateToNotes = () => navigation.navigate('NotesList');
+  const searching = query.trim() !== '';
+  const results = useMemo(() => sortRecords(searchRecords(records, query), sortMode), [records, query, sortMode]);
+  const pinned = useMemo(() => (searching ? [] : results.filter((r) => r.pinned)), [results, searching]);
+
+  const openRecord = useCallback((record: VaultRecord) => navigation.navigate('Record', { id: record.id }), [navigation]);
+  const addRecord = () => navigation.navigate('AddEditRecord', {});
+  const toggleSort = () => {
+    updateSettings({ sortMode: nextSortMode(sortMode) }).catch(() => {});
+  };
+
+  const renderRow = ({ item, index }: ListRenderItemInfo<VaultRecord>) => (
+    <Row record={item} index={index} reduceMotion={reduceMotion} stagger={tokens.motion.stagger} onPress={openRecord} />
+  );
+
+  const header = (
+    <View>
+      {pinned.length > 0 ? (
+        <View style={{ marginBottom: tokens.spacing.lg }}>
+          <Eyebrow style={{ paddingHorizontal: tokens.spacing.lg, marginBottom: tokens.spacing.sm }}>Pinned</Eyebrow>
+          <FlatList
+            horizontal
+            data={pinned}
+            keyExtractor={(r) => r.id}
+            renderItem={({ item }) => <PinnedCard record={item} onPress={openRecord} />}
+            snapToInterval={PINNED_CARD_WIDTH + PINNED_GAP}
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            // Room for the card shadow, and enough side padding that the next
+            // card peeks in from the edge.
+            contentContainerStyle={{ paddingHorizontal: tokens.spacing.lg, paddingVertical: 4, gap: PINNED_GAP }}
+          />
+        </View>
+      ) : null}
+      <View style={[styles.sortRow, { paddingHorizontal: tokens.spacing.lg, marginBottom: tokens.spacing.xs }]}>
+        <Eyebrow>{countLabel(results.length)}</Eyebrow>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Sort order: ${sortMode === 'lastUsed' ? 'last used first' : 'alphabetical'}. Tap to change`}
+          onPress={toggleSort}
+          hitSlop={8}
+          style={styles.sortButton}
+        >
+          <Mono variant="value" color={tokens.colors.accent}>
+            {SORT_LABEL[sortMode]}
+          </Mono>
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const empty = (
+    <View style={[styles.empty, { padding: tokens.spacing.xxxl }]}>
+      {records.length === 0 ? (
+        <>
+          <Body style={styles.emptyText}>Nothing in the vault yet</Body>
+          <ActionButton title="Add your first record" variant="teal" onPress={addRecord} style={styles.emptyButton} />
+        </>
+      ) : (
+        <Secondary style={styles.emptyText}>{`No matches for '${query.trim()}'`}</Secondary>
+      )}
+    </View>
+  );
 
   return (
-    <ScrollView style={styles.screen}>
-      <View style={styles.statsCard}>
-        <View style={styles.statsRow}>
-          <View style={[styles.stat, styles.statDivider]}>
-            <Text style={[styles.statValue, { color: colors.primary }]}>{credentials.length}</Text>
-            <Text style={styles.statLabel}>Credentials</Text>
-          </View>
-          <View style={[styles.stat, styles.statDivider]}>
-            <Text style={[styles.statValue, { color: colors.secondary }]}>{personalInfo.length}</Text>
-            <Text style={styles.statLabel}>IDs & Docs</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: colors.success }]}>{notes.length}</Text>
-            <Text style={styles.statLabel}>Notes</Text>
-          </View>
-        </View>
+    <Screen>
+      <View style={[styles.topRow, { paddingHorizontal: tokens.spacing.lg, gap: tokens.spacing.sm }]}>
+        <Ionicons name="shield-checkmark-outline" size={22} color={tokens.colors.amber} />
+        <BarTitle style={styles.brand}>
+          Info
+          <BarTitle color={tokens.colors.amberText}>Vault</BarTitle>
+        </BarTitle>
+        <IconButton icon="lock-closed-outline" accessibilityLabel="Lock the vault" onPress={logout} />
+        <IconButton icon="settings-outline" accessibilityLabel="Settings" onPress={() => navigation.navigate('Settings')} />
       </View>
 
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionAccent} />
-        <Text style={styles.sectionTitle}>Categories</Text>
-      </View>
+      <TextField
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search titles, labels, tags…"
+        accessibilityLabel="Search records"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        leading={<Ionicons name="search-outline" size={18} color={tokens.colors.accent} />}
+        trailing={
+          <Mono variant="value" color={tokens.colors.muted}>
+            {countLabel(records.length)}
+          </Mono>
+        }
+        style={{ paddingHorizontal: tokens.spacing.lg, marginBottom: tokens.spacing.lg }}
+      />
 
-      <View style={styles.categories}>
-        <CategoryCard
-          title="Credentials"
-          description="Store website logins and passwords"
-          icon="key-outline"
-          onPress={navigateToCredentials}
-          color={colors.primary}
-        />
+      <FlatList
+        data={results}
+        keyExtractor={(r) => r.id}
+        renderItem={renderRow}
+        ListHeaderComponent={header}
+        ListEmptyComponent={empty}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingBottom: FAB_SIZE + tokens.spacing.xxxl * 2 }}
+      />
 
-        <CategoryCard
-          title="IDs & Documents"
-          description="Passports, licenses and ID numbers"
-          icon="card-outline"
-          onPress={navigateToPersonalInfo}
-          color={colors.secondary}
-        />
-
-        <CategoryCard
-          title="Notes"
-          description="Secure private notes and ideas"
-          icon="document-text-outline"
-          onPress={navigateToNotes}
-          color={colors.success}
-        />
-      </View>
-
-      <Card
-        style={styles.tipCard}
-        variant="accent"
-        icon="bulb-outline"
-        title="Tip of the day"
+      <View
+        style={[
+          styles.fab,
+          tokens.shadows.glowAmber,
+          { right: tokens.spacing.xl, bottom: tokens.spacing.xxl },
+        ]}
       >
-        <Text style={styles.tipText}>{getDailyTip()}</Text>
-      </Card>
-    </ScrollView>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add a record"
+          onPress={addRecord}
+          style={({ pressed }) => [styles.fabPressable, pressed && styles.fabPressed]}
+        >
+          <LinearGradient
+            colors={tokens.gradients.buttonAmber.colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <Ionicons name="add" size={30} color={tokens.colors.onAmber} />
+        </Pressable>
+      </View>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  statsCard: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  statsRow: {
-    flexDirection: 'row',
-  },
-  stat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    borderRightWidth: 1,
-    borderRightColor: '#F3F4F6',
-  },
-  statValue: {
-    fontSize: 24,
-    lineHeight: 32,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#4B5563',
-  },
-  sectionHeader: {
-    marginHorizontal: 16,
-    marginBottom: 12,
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 64,
   },
-  sectionAccent: {
-    width: 4,
-    height: 20,
-    backgroundColor: colors.secondary,
-    borderRadius: 9999,
-    marginRight: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    lineHeight: 28,
-    fontWeight: '600',
-    color: colors.dark,
-  },
-  categories: {
-    marginHorizontal: 16,
-  },
-  categoryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  categoryRow: {
+  brand: { flex: 1 },
+  sortRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 32,
   },
-  categoryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 9999,
+  sortButton: { minHeight: 32, justifyContent: 'center' },
+  empty: { alignItems: 'center' },
+  emptyText: { textAlign: 'center', marginBottom: 20 },
+  emptyButton: { alignSelf: 'stretch' },
+  fab: {
+    position: 'absolute',
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+  },
+  fabPressable: {
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+    overflow: 'hidden',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
   },
-  categoryBody: {
-    flex: 1,
-  },
-  categoryTitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '500',
-    color: colors.dark,
-  },
-  categoryDescription: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  tipCard: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  tipText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#4B5563',
-  },
+  fabPressed: { transform: [{ scale: 0.96 }] },
 });
 
 export default Home;

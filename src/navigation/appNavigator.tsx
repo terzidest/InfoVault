@@ -67,7 +67,8 @@ const AppNavigator: React.FC = () => {
           name="Home"
           component={Home}
           options={{
-            headerShown: true,
+            // Home draws its own brand row.
+            headerShown: false,
             gestureEnabled: false,
           }}
         />

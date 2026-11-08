@@ -124,7 +124,7 @@ describe('settingsStore theme migration', () => {
   beforeEach(() => {
     secureStoreMock.__reset();
     useSettingsStore.setState({
-      settings: { version: SETTINGS_VERSION, theme: 'system', autoLockTimeout: 300000, maskSensitiveData: true },
+      settings: { version: SETTINGS_VERSION, theme: 'system', autoLockTimeout: 300000, maskSensitiveData: true, sortMode: 'lastUsed' },
       isLoading: false,
       error: null,
     });
@@ -163,6 +163,7 @@ describe('settingsStore theme migration', () => {
       theme: 'system',
       autoLockTimeout: 300000,
       maskSensitiveData: true,
+      sortMode: 'lastUsed',
     });
     expect(migrateStoredSettings({ theme: 'light' }).theme).toBe('system');
     expect(migrateStoredSettings({ version: SETTINGS_VERSION, theme: 'light' }).theme).toBe('light');
