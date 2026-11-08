@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import useAuthStore from './authStore';
 import { createOpTracker } from './opTracker';
 import { migrateV1 } from '../services/migrateV1';
-import { commitVaultBytes, encodeVaultFile, readVault } from '../services/vaultFile';
+import { errorMessage, requireKey } from '../services/secureStorage';
+import { isVaultRecord, readVault, writeVault } from '../services/vaultFile';
 import { generateSecureId } from '../utils/crypto';
 import { MAX_RECORD_BYTES, serializedSize } from '../utils/records';
 import type { VaultRecord, VaultRecordInput } from '../types/models';
@@ -25,7 +26,8 @@ export interface RecordsState {
   error: string | null;
   // True once open() has populated `records` for the current unlock.
   isOpen: boolean;
-  open: (vaultKey: Uint8Array) => Promise<void>;
+  // Loads the vault under the key authStore currently holds.
+  open: () => Promise<void>;
   add: (input: VaultRecordInput) => Promise<VaultRecord>;
   update: (id: string, patch: Partial<VaultRecordInput>) => Promise<VaultRecord>;
   remove: (id: string) => Promise<boolean>;
@@ -46,17 +48,9 @@ const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
   return run;
 };
 
-// Bumped by clear(). A task that started before a clear()/lock must not
-// repopulate plaintext afterwards, so every set() re-checks it and the key.
+// Bumped by clear() and at the start of open(). A task that started before
+// must not publish afterwards, so every set() re-checks it and the key.
 let generation = 0;
-
-// The in-memory key lives in authStore; read it at call-time (never at module
-// load) so the import cycle stays safe and a lock is seen immediately.
-const requireKey = (): Uint8Array => {
-  const key = useAuthStore.getState().encryptionKey;
-  if (!key) throw new Error('Vault is locked');
-  return key;
-};
 
 // logout() zeroes the key bytes in place and drops the reference, so a
 // reference comparison detects a lock that happened during an await.
@@ -68,18 +62,16 @@ const assertSize = (record: VaultRecord): void => {
   if (bytes > MAX_RECORD_BYTES) throw new RecordTooLargeError(bytes);
 };
 
-// Seals and commits the full record set. If the vault locked while we were
-// sealing, the bytes were encrypted with a dead key — abort rather than
-// persist an unreadable vault.
-const persist = async (records: VaultRecord[], key: Uint8Array): Promise<void> => {
-  const bytes = await encodeVaultFile(records, key, { kind: 'vault' });
-  if (useAuthStore.getState().encryptionKey !== key) {
-    throw new Error('Vault is locked');
-  }
-  await commitVaultBytes(bytes);
+// `{ title: undefined }` must not punch a hole in the record.
+const withoutUndefined = <T extends object>(patch: T): Partial<T> =>
+  Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<T>;
+
+const assertValid = (record: VaultRecord): void => {
+  if (!isVaultRecord(record)) throw new Error('Record is invalid');
+  assertSize(record);
 };
 
-const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const nowIso = (): string => new Date().toISOString();
 
 interface Mutation<T> {
   records: VaultRecord[];
@@ -101,7 +93,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
         // set over the real vault.
         if (!get().isOpen) throw new Error('Vault is not open');
         const { records, result } = compute(get().records);
-        await persist(records, key);
+        await writeVault(records, key); // lock-checked after sealing
         if (isCurrent(key, gen)) set({ records });
         return result;
       } catch (error) {
@@ -122,29 +114,35 @@ const useRecordsStore = create<RecordsState>((set, get) => {
     error: null,
     isOpen: false,
 
-    open: (vaultKey) =>
+    open: () =>
       enqueue(async () => {
+        // Start from nothing: whatever an earlier open left behind is stale,
+        // and a task from before this point must not publish into this one.
+        generation += 1;
         const gen = generation;
+        set({ records: [], isOpen: false, error: null });
+        let key: Uint8Array | null = null;
         ops.begin(set);
         try {
-          // Always runs: it is a single registry probe when there is nothing
-          // to migrate, and it retries entries an earlier pass had to leave
+          key = requireKey();
+          // Always runs: it is one registry probe when there is nothing to
+          // migrate, and it retries entries an earlier pass had to leave
           // behind. It writes vault.bin itself when it migrates anything.
-          const migration = await migrateV1(vaultKey).catch((error: unknown) => {
+          const migration = await migrateV1(key).catch((error: unknown) => {
             // v1 stays put for the next unlock; the existing vault still loads.
             console.warn('v1 migration failed; will retry on the next unlock', error instanceof Error ? error.name : '');
             return null;
           });
           // readVault also recovers a vault whose last commit was interrupted
-          // (vault.bin missing, .tmp/.bak present) — never gate on vaultExists.
+          // (vault.bin missing, .bak present) — never gate on vaultExists.
           // No file is written here when there is none: setup/unlock (cutover
           // PR) decides that.
-          const records = migration?.hadV1 ? migration.records : ((await readVault(vaultKey)) ?? []);
-          if (isCurrent(vaultKey, gen)) set({ records, isOpen: true });
+          const records = migration?.hadV1 ? migration.records : ((await readVault(key)) ?? []);
+          if (isCurrent(key, gen)) set({ records, isOpen: true });
         } catch (error) {
           // Locked or cleared mid-open: the lock zeroed the key, so the read
           // failing is the expected consequence, not an error to surface.
-          if (!isCurrent(vaultKey, gen)) return;
+          if (key !== null && !isCurrent(key, gen)) return;
           console.error('Error opening the vault:', error);
           set({ error: errorMessage(error) });
           throw error;
@@ -155,10 +153,10 @@ const useRecordsStore = create<RecordsState>((set, get) => {
 
     add: (input) =>
       mutate('adding', (records) => {
-        const now = new Date().toISOString();
+        const now = nowIso();
         // Spread first so a stray id/timestamp on the input can never win.
         const record: VaultRecord = { ...input, id: generateSecureId(), createdAt: now, updatedAt: now };
-        assertSize(record);
+        assertValid(record);
         return { records: [...records, record], result: record };
       }),
 
@@ -166,8 +164,8 @@ const useRecordsStore = create<RecordsState>((set, get) => {
       mutate('updating', (records) => {
         const existing = records.find((r) => r.id === id);
         if (!existing) throw new Error('Record not found');
-        const updated: VaultRecord = { ...existing, ...patch, id, updatedAt: new Date().toISOString() };
-        assertSize(updated);
+        const updated: VaultRecord = { ...existing, ...withoutUndefined(patch), id, updatedAt: nowIso() };
+        assertValid(updated);
         return { records: records.map((r) => (r.id === id ? updated : r)), result: updated };
       }),
 
@@ -178,7 +176,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
       mutate('pinning', (records) => {
         const existing = records.find((r) => r.id === id);
         if (!existing) throw new Error('Record not found');
-        const updated: VaultRecord = { ...existing, pinned: !existing.pinned, updatedAt: new Date().toISOString() };
+        const updated: VaultRecord = { ...existing, pinned: !existing.pinned, updatedAt: nowIso() };
         return { records: records.map((r) => (r.id === id ? updated : r)), result: updated };
       }),
 
@@ -191,6 +189,13 @@ const useRecordsStore = create<RecordsState>((set, get) => {
       set({ records: [], isOpen: false, error: null });
     },
   };
+});
+
+// Locking must evict the decrypted records even before the cutover wires
+// clear() into logout(): follow authStore and clear whenever the session ends.
+useAuthStore.subscribe((state, previous) => {
+  const lockedNow = (previous.isAuthenticated && !state.isAuthenticated) || (previous.encryptionKey && !state.encryptionKey);
+  if (lockedNow) useRecordsStore.getState().clear();
 });
 
 export default useRecordsStore;

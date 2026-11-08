@@ -3,15 +3,22 @@ import type { StorageType } from '../types/storage';
 import { encryptRecord, decryptRecord } from '../utils/crypto';
 import useAuthStore from '../store/authStore';
 
-const STORAGE_TYPES: StorageType[] = ['credential', 'note', 'personalInfo'];
+export const STORAGE_TYPES: readonly StorageType[] = ['credential', 'note', 'personalInfo'];
+
+// The SecureStore entry listing a type's record ids (v1 layout). The v2
+// migration reads these; nothing else should spell the name.
+export const registryKey = (type: StorageType): string => `${type}Keys`;
 
 // The in-memory key lives in authStore; read it at call-time (never at module
 // load) so the authStore <-> secureStorage import cycle stays safe.
-const requireKey = (): Uint8Array => {
+export const requireKey = (): Uint8Array => {
   const key = useAuthStore.getState().encryptionKey;
   if (!key) throw new Error('Vault is locked');
   return key;
 };
+
+export const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export const saveToSecureStore = async (
   key: string,
@@ -29,12 +36,12 @@ export const saveToSecureStore = async (
     }
     await SecureStore.setItemAsync(key, sealed);
 
-    const keys = (await SecureStore.getItemAsync(type + 'Keys')) || '[]';
+    const keys = (await SecureStore.getItemAsync(registryKey(type))) || '[]';
     const parsedKeys: string[] = JSON.parse(keys);
 
     if (!parsedKeys.includes(key)) {
       parsedKeys.push(key);
-      await SecureStore.setItemAsync(type + 'Keys', JSON.stringify(parsedKeys));
+      await SecureStore.setItemAsync(registryKey(type), JSON.stringify(parsedKeys));
     }
 
     return true;
@@ -54,10 +61,10 @@ export const deleteFromSecureStore = async (key: string, type: StorageType): Pro
   try {
     await SecureStore.deleteItemAsync(key);
 
-    const keys = (await SecureStore.getItemAsync(type + 'Keys')) || '[]';
+    const keys = (await SecureStore.getItemAsync(registryKey(type))) || '[]';
     const parsedKeys: string[] = JSON.parse(keys);
     const updatedKeys = parsedKeys.filter((k) => k !== key);
-    await SecureStore.setItemAsync(type + 'Keys', JSON.stringify(updatedKeys));
+    await SecureStore.setItemAsync(registryKey(type), JSON.stringify(updatedKeys));
 
     return true;
   } catch (error) {
@@ -68,7 +75,7 @@ export const deleteFromSecureStore = async (key: string, type: StorageType): Pro
 
 export const getKeysByType = async (type: StorageType): Promise<string[]> => {
   try {
-    const keys = (await SecureStore.getItemAsync(type + 'Keys')) || '[]';
+    const keys = (await SecureStore.getItemAsync(registryKey(type))) || '[]';
     return JSON.parse(keys);
   } catch (error) {
     console.error('Error getting keys by type', error);
@@ -105,6 +112,6 @@ export const wipeAllRecords = async (): Promise<void> => {
     for (const key of keys) {
       await SecureStore.deleteItemAsync(key);
     }
-    await SecureStore.deleteItemAsync(type + 'Keys');
+    await SecureStore.deleteItemAsync(registryKey(type));
   }
 };

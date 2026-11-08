@@ -1,8 +1,10 @@
+import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
+import useAuthStore from '../../store/authStore';
 import * as crypto from '../../utils/crypto';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
-import { MIGRATION_DONE_KEY, hasV1Data, migrateV1 } from '../migrateV1';
+import { hasV1Data, migrateV1 } from '../migrateV1';
 import { encodeVaultFile, readVault, vaultExists, writeVault } from '../vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../../types/models';
 
@@ -43,6 +45,7 @@ beforeEach(async () => {
   fsMock.__reset();
   secureStoreMock.__reset();
   key = await generateVaultKey();
+  useAuthStore.setState({ encryptionKey: key, isAuthenticated: true });
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
@@ -162,7 +165,6 @@ describe('migrateV1', () => {
     await writeVault([{ ...CREDS[0]!, template: 'login', fields: [], pinned: false, tags: [] } as VaultRecord], key);
     const result = await migrateV1(key);
     expect(result).toEqual({ hadV1: false, migrated: 0, skipped: 0, records: [] });
-    expect(secureStoreMock.__store.get(MIGRATION_DONE_KEY)).toBe('true');
   });
 
   it('drops dangling registry ids without writing a vault', async () => {
@@ -249,23 +251,18 @@ describe('migrateV1', () => {
     expect(byId((await readVault(key)) ?? []).get('c1')?.title).toBe('Already in v2');
   });
 
-  it('skips the registry probe once a pass found nothing, and clears the flag if a registry turns up', async () => {
-    expect(await migrateV1(key)).toEqual({ hadV1: false, migrated: 0, skipped: 0, records: [] });
-    expect(secureStoreMock.__store.get(MIGRATION_DONE_KEY)).toBe('true');
-
-    const getSpy = jest.spyOn(SecureStore, 'getItemAsync');
-    await migrateV1(key);
-    expect(getSpy).toHaveBeenCalledTimes(1); // the flag only
-    expect(getSpy).toHaveBeenCalledWith(MIGRATION_DONE_KEY);
-
-    // A registry appearing behind the flag (e.g. a restored keychain): the
-    // flagged pass skips it, but any probe that sees it drops the flag.
+  it('a lock during the vault write aborts before any deletion; v1 stays intact', async () => {
     await seedV1(key);
-    expect((await migrateV1(key)).hadV1).toBe(false);
+    const before = new Map(secureStoreMock.__store);
+    // The nonce draw is the await inside encodeVaultFile: lock during it.
+    jest.spyOn(Crypto, 'getRandomBytesAsync').mockImplementationOnce(async (n: number) => {
+      useAuthStore.getState().logout();
+      return new Uint8Array(n);
+    });
+    await expect(migrateV1(key)).rejects.toThrow('Vault is locked');
+    expect(secureStoreMock.__store).toEqual(before);
+    expect(fsMock.__files.size).toBe(0);
     expect(await hasV1Data()).toBe(true);
-    expect(secureStoreMock.__store.has(MIGRATION_DONE_KEY)).toBe(false);
-    expect((await migrateV1(key)).migrated).toBe(4);
-    expect(secureStoreMock.__store.has(MIGRATION_DONE_KEY)).toBe(false); // only set by an empty probe
   });
 
   it('merges with a vault whose last commit was interrupted (vault.bin missing, .bak present)', async () => {

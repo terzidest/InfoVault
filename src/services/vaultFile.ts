@@ -4,7 +4,9 @@ import { gcm } from '@noble/ciphers/aes.js';
 import { bytesToUtf8, concatBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
 import type { KdfParams } from '../utils/crypto';
 import { parseKdfParams } from '../utils/crypto';
-import type { Field, VaultRecord } from '../types/models';
+import { TEMPLATES } from '../utils/records';
+import useAuthStore from '../store/authStore';
+import type { Field, FieldKind, VaultRecord } from '../types/models';
 
 // The sealed vault file: every record, as one AES-256-GCM blob under the
 // vault key. Lives in the app's document directory as `vault.bin`. The same
@@ -101,18 +103,23 @@ const parseHeader = (raw: string): VaultFileHeader => {
 
 // Minimal structural check: enough to keep the store from crashing on a
 // malformed payload, not a full schema validation of every field kind.
+const FIELD_KINDS: ReadonlySet<string> = new Set<FieldKind>(['text', 'secret', 'number', 'date', 'url', 'multiline']);
+const TEMPLATE_IDS: ReadonlySet<string> = new Set<string>(Object.keys(TEMPLATES));
+
 const isField = (value: unknown): value is Field =>
   isObject(value) &&
   typeof value.id === 'string' &&
   typeof value.label === 'string' &&
   typeof value.value === 'string' &&
-  typeof value.kind === 'string';
+  typeof value.kind === 'string' &&
+  FIELD_KINDS.has(value.kind);
 
 export const isVaultRecord = (value: unknown): value is VaultRecord =>
   isObject(value) &&
   typeof value.id === 'string' &&
   typeof value.title === 'string' &&
   typeof value.template === 'string' &&
+  TEMPLATE_IDS.has(value.template) &&
   Array.isArray(value.fields) &&
   value.fields.every(isField) &&
   typeof value.pinned === 'boolean' &&
@@ -244,8 +251,17 @@ export const commitVaultBytes = async (bytes: Uint8Array): Promise<void> => {
   deleteIfExists(bakFile());
 };
 
+/**
+ * The only way the vault gets written. `key` must be the live key held by
+ * authStore: logout() zeroes the key bytes in place, so a lock during the
+ * nonce draw would otherwise seal the records under zeros. The reference
+ * check after encoding catches that and aborts before anything touches disk.
+ */
 export const writeVault = async (records: readonly VaultRecord[], key: Uint8Array): Promise<void> => {
   const bytes = await encodeVaultFile(records, key, { kind: 'vault' });
+  if (useAuthStore.getState().encryptionKey !== key) {
+    throw new Error('Vault is locked');
+  }
   await commitVaultBytes(bytes);
 };
 

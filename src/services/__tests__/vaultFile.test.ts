@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system';
 import { gcm } from '@noble/ciphers/aes.js';
 import { hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
+import useAuthStore from '../../store/authStore';
 import { generateVaultKey } from '../../utils/crypto';
 import {
   VaultFileAuthError,
@@ -65,6 +66,8 @@ let key: Uint8Array;
 beforeEach(async () => {
   fsMock.__reset();
   key = await generateVaultKey();
+  // writeVault refuses any key authStore does not currently hold.
+  useAuthStore.setState({ encryptionKey: key, isAuthenticated: true });
 });
 
 describe('encodeVaultFile / decodeVaultFile', () => {
@@ -210,6 +213,17 @@ describe('encodeVaultFile / decodeVaultFile', () => {
     expect(isVaultRecord(makeRecord(1))).toBe(true);
     expect(isVaultRecord({ ...makeRecord(1), tags: [1] })).toBe(false);
   });
+
+  it('rejects an unknown template or field kind', async () => {
+    const badTemplate = [{ ...makeRecord(1), template: 'passport' }] as unknown as VaultRecord[];
+    const badKind = [
+      { ...makeRecord(1), fields: [{ id: 'f', label: 'x', value: 'y', kind: 'password' }] },
+    ] as unknown as VaultRecord[];
+    expect(isVaultRecord(badTemplate[0])).toBe(false);
+    expect(isVaultRecord(badKind[0])).toBe(false);
+    await expect(encodeVaultFile(badTemplate, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+    await expect(encodeVaultFile(badKind, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+  });
 });
 
 describe('readVault / writeVault', () => {
@@ -347,6 +361,23 @@ describe('readVault / writeVault', () => {
     };
     fsMock.__files.set(VAULT, await encodeVaultFile(makeRecords(1), key, header));
     await expect(readVault(key)).rejects.toThrow(VaultFileFormatError);
+  });
+
+  it('writeVault refuses a key the vault no longer holds and touches nothing on disk', async () => {
+    await writeVault(makeRecords(1), key);
+    const before = fsMock.__files.get(VAULT);
+    // Lock during the nonce draw: the key bytes are zeroed in place.
+    jest.spyOn(Crypto, 'getRandomBytesAsync').mockImplementationOnce(async (n: number) => {
+      useAuthStore.getState().logout();
+      return new Uint8Array(n);
+    });
+    await expect(writeVault(makeRecords(5), key)).rejects.toThrow('Vault is locked');
+    expect(fsMock.__files.get(VAULT)).toBe(before);
+    expect([...fsMock.__files.keys()]).toEqual([VAULT]);
+    // And a key that was simply never the live one.
+    useAuthStore.setState({ encryptionKey: await generateVaultKey(), isAuthenticated: true });
+    await expect(writeVault(makeRecords(5), key)).rejects.toThrow('Vault is locked');
+    expect(fsMock.__files.get(VAULT)).toBe(before);
   });
 
   it('uses expo-crypto for the nonce', async () => {

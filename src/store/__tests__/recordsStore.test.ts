@@ -5,7 +5,7 @@ import useAuthStore from '../authStore';
 import useRecordsStore, { RecordTooLargeError } from '../recordsStore';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
 import { MAX_RECORD_BYTES } from '../../utils/records';
-import { encodeVaultFile, readVault, vaultExists, writeVault } from '../../services/vaultFile';
+import { commitVaultBytes, encodeVaultFile, readVault, vaultExists, writeVault } from '../../services/vaultFile';
 import type { VaultRecordInput } from '../../types/models';
 
 const fsMock = FileSystem as unknown as {
@@ -45,8 +45,8 @@ beforeEach(() => {
 
 describe('open', () => {
   it('yields an empty set, and writes no file, when there is neither a vault nor v1 data', async () => {
-    const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await unlockWith();
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(true);
     expect(useRecordsStore.getState().isLoading).toBe(false);
@@ -57,7 +57,7 @@ describe('open', () => {
     const key = await unlockWith();
     const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
     await writeVault(stored, key);
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual(stored);
   });
 
@@ -68,7 +68,7 @@ describe('open', () => {
       await encryptRecord({ id: 'c1', title: 'Bank', username: 'me', createdAt: 't', updatedAt: 't' }, key)
     );
     secureStoreMock.__store.set('credentialKeys', JSON.stringify(['c1']));
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const records = useRecordsStore.getState().records;
     expect(records.map((r) => [r.id, r.template])).toEqual([['c1', 'login']]);
     expect(await readVault(key)).toEqual(records);
@@ -81,7 +81,7 @@ describe('open', () => {
     // Crash between moving vault.bin → .bak and .tmp → vault.bin, with a partial .tmp.
     fsMock.__files.set(`${VAULT}.bak`, await encodeVaultFile(stored, key, { kind: 'vault' }));
     fsMock.__files.set(`${VAULT}.tmp`, new Uint8Array([0x49, 0x56]));
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual(stored);
     const b = await useRecordsStore.getState().add(loginInput('B'));
     expect((await readVault(key))?.map((r) => r.id)).toEqual(['a', b.id]);
@@ -93,14 +93,14 @@ describe('open', () => {
     const v1 = { id: 'c1', title: 'Bank', createdAt: 't', updatedAt: 't' };
     secureStoreMock.__store.set('c1', await encryptRecord(v1, other)); // not readable yet
     secureStoreMock.__store.set('credentialKeys', JSON.stringify(['c1']));
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(secureStoreMock.__store.has('c1')).toBe(true);
     const a = await useRecordsStore.getState().add(loginInput('A'));
     useRecordsStore.getState().clear();
 
     secureStoreMock.__store.set('c1', await encryptRecord(v1, key)); // now it decrypts
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records.map((r) => r.id).sort()).toEqual([a.id, 'c1'].sort());
     expect(secureStoreMock.__store.size).toBe(0);
   });
@@ -113,17 +113,17 @@ describe('open', () => {
       useAuthStore.getState().logout();
       return null;
     });
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(false);
     expect(useRecordsStore.getState().error).toBeNull();
 
-    const key2 = await unlockWith();
+    await unlockWith();
     jest.spyOn(SecureStore, 'getItemAsync').mockImplementationOnce(async () => {
       useRecordsStore.getState().clear();
       return null;
     });
-    await useRecordsStore.getState().open(key2);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(false);
     expect(useRecordsStore.getState().isLoading).toBe(false);
@@ -140,7 +140,7 @@ describe('open', () => {
       if (k === 'c1') throw new Error('keystore unavailable');
       return realGet(k, o);
     });
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual(stored);
     expect(useRecordsStore.getState().isOpen).toBe(true);
     expect(useRecordsStore.getState().error).toBeNull();
@@ -148,10 +148,48 @@ describe('open', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('migration failed'), 'Error');
   });
 
+  it('throws while locked and opens nothing', async () => {
+    await expect(useRecordsStore.getState().open()).rejects.toThrow('Vault is locked');
+    expect(useRecordsStore.getState().isOpen).toBe(false);
+    expect(useRecordsStore.getState().error).toBe('Vault is locked');
+  });
+
+  it('starts from nothing: a failed re-open leaves no stale records and refuses mutations', async () => {
+    const key = await unlockWith();
+    await useRecordsStore.getState().open();
+    const a = await useRecordsStore.getState().add(loginInput('A'));
+    expect(useRecordsStore.getState().records).toEqual([a]);
+
+    const bytes = fsMock.__files.get(VAULT) ?? new Uint8Array();
+    const corrupt = new Uint8Array(bytes);
+    corrupt[corrupt.length - 1] = (corrupt[corrupt.length - 1] ?? 0) ^ 0xff;
+    fsMock.__files.set(VAULT, corrupt);
+    await expect(useRecordsStore.getState().open()).rejects.toThrow();
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().isOpen).toBe(false);
+    await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is not open');
+    expect(fsMock.__files.get(VAULT)).toBe(corrupt); // nothing was written over it
+    expect(key.length).toBe(32);
+  });
+
+  it('a lock evicts the records without the cutover having to call clear()', async () => {
+    await unlockWith();
+    await useRecordsStore.getState().open();
+    await useRecordsStore.getState().add(loginInput('A'));
+    expect(useRecordsStore.getState().records).toHaveLength(1);
+    useAuthStore.getState().logout();
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(useRecordsStore.getState().isOpen).toBe(false);
+    // The generation moved on: a mutation is refused rather than resumed.
+    await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is locked');
+    await unlockWith();
+    await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is not open');
+  });
+
   it('surfaces a wrong key as an error and rethrows', async () => {
-    await writeVault([], await generateVaultKey());
-    const other = await unlockWith(); // the live key is not the one the file was sealed under
-    await expect(useRecordsStore.getState().open(other)).rejects.toThrow();
+    await commitVaultBytes(await encodeVaultFile([], await generateVaultKey(), { kind: 'vault' }));
+    await unlockWith(); // the live key is not the one the file was sealed under
+    await expect(useRecordsStore.getState().open()).rejects.toThrow();
     expect(useRecordsStore.getState().error).not.toBeNull();
     expect(useRecordsStore.getState().isOpen).toBe(false);
   });
@@ -160,7 +198,7 @@ describe('open', () => {
 describe('mutations persist through the vault file', () => {
   it('add / update / remove / togglePin round-trip through readVault', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const { add, update, remove, togglePin, getById } = useRecordsStore.getState();
 
     const a = await add(loginInput('A'));
@@ -187,7 +225,7 @@ describe('mutations persist through the vault file', () => {
 
   it('serializes concurrent mutations so none is lost', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const { add, update, remove } = useRecordsStore.getState();
     const [a, b, c] = await Promise.all([add(loginInput('A')), add(loginInput('B')), add(loginInput('C'))]);
     expect(useRecordsStore.getState().records.map((r) => r.id)).toEqual([a.id, b.id, c.id]);
@@ -202,7 +240,7 @@ describe('mutations persist through the vault file', () => {
 
   it('a mutation that completes after clear() does not repopulate memory', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     jest.spyOn(Crypto, 'getRandomBytesAsync').mockImplementationOnce(async (n: number) => {
       useRecordsStore.getState().clear();
       return new Uint8Array(n);
@@ -212,9 +250,24 @@ describe('mutations persist through the vault file', () => {
     expect(await readVault(key)).toEqual([a]); // the key was still live, so the write stands
   });
 
+  it('update ignores undefined patch values and rejects a patch that makes the record invalid', async () => {
+    await unlockWith();
+    await useRecordsStore.getState().open();
+    const a = await useRecordsStore.getState().add(loginInput('A'));
+    const same = await useRecordsStore.getState().update(a.id, { title: undefined, tags: ['t'] });
+    expect(same.title).toBe('A');
+    expect(same.tags).toEqual(['t']);
+
+    const bad = { template: 'passport' } as unknown as Partial<VaultRecordInput>;
+    await expect(useRecordsStore.getState().update(a.id, bad)).rejects.toThrow('Record is invalid');
+    expect(useRecordsStore.getState().error).toBe('Record is invalid');
+    expect(useRecordsStore.getState().getById(a.id)).toEqual(same);
+    expect((await readVault(useAuthStore.getState().encryptionKey ?? new Uint8Array()))?.[0]).toEqual(same);
+  });
+
   it('update and togglePin of a missing id throw and write nothing', async () => {
-    const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await unlockWith();
+    await useRecordsStore.getState().open();
     await expect(useRecordsStore.getState().update('nope', { title: 'x' })).rejects.toThrow('Record not found');
     await expect(useRecordsStore.getState().togglePin('nope')).rejects.toThrow('Record not found');
     expect(useRecordsStore.getState().error).toBe('Record not found');
@@ -235,7 +288,7 @@ describe('mutations persist through the vault file', () => {
 
   it('ignores a stray id or timestamps on the add() input', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const stray = { ...loginInput('A'), id: 'forged', createdAt: 'x', updatedAt: 'y' } as VaultRecordInput;
     const a = await useRecordsStore.getState().add(stray);
     expect(a.id).not.toBe('forged');
@@ -253,7 +306,8 @@ describe('mutations persist through the vault file', () => {
 
   it('abandons a write when the vault locks while the file is being sealed', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    const keyCopy = new Uint8Array(key); // logout() zeroes `key` in place
+    await useRecordsStore.getState().open();
     const first = await useRecordsStore.getState().add(loginInput('A'));
     const bytesBefore = fsMock.__files.get(VAULT);
 
@@ -264,13 +318,15 @@ describe('mutations persist through the vault file', () => {
     });
     await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is locked');
     expect(fsMock.__files.get(VAULT)).toBe(bytesBefore);
-    expect(useRecordsStore.getState().records).toEqual([first]); // memory matches disk
+    // The lock evicted memory; disk still holds exactly the acknowledged set.
+    expect(useRecordsStore.getState().records).toEqual([]);
+    expect(await readVault(keyCopy)).toEqual([first]);
     expect(useRecordsStore.getState().error).toBeNull(); // the lock is not an error state
   });
 
   it('a failed file write leaves memory and disk consistent and sets error', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const first = await useRecordsStore.getState().add(loginInput('A'));
     fsMock.__failNextWrite('vault.bin.tmp');
     await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('simulated write failure');
@@ -281,7 +337,7 @@ describe('mutations persist through the vault file', () => {
 
   it('rejects a record over MAX_RECORD_BYTES on add and on update', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const huge = loginInput('Huge');
     huge.fields[0] = { ...huge.fields[0]!, value: 'x'.repeat(MAX_RECORD_BYTES) };
     await expect(useRecordsStore.getState().add(huge)).rejects.toThrow(RecordTooLargeError);
@@ -296,7 +352,7 @@ describe('mutations persist through the vault file', () => {
 
   it('clear() empties memory but leaves the file alone', async () => {
     const key = await unlockWith();
-    await useRecordsStore.getState().open(key);
+    await useRecordsStore.getState().open();
     const a = await useRecordsStore.getState().add(loginInput('A'));
     useRecordsStore.getState().clear();
     expect(useRecordsStore.getState().records).toEqual([]);
