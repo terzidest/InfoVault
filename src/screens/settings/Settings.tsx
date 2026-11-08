@@ -60,13 +60,15 @@ const describeBiometrics = (
   if (!auth.hasHardware || !auth.isEnrolled) {
     return { subtitle: 'No fingerprint or face enrolled on this phone', icon: 'finger-print-outline', available: false };
   }
-  if (auth.hasFingerprintId && auth.hasFaceId) {
-    return { subtitle: 'Biometrics on this phone', icon: 'finger-print-outline', available: true };
-  }
-  if (auth.hasFaceId) return { subtitle: 'Face unlock on this phone', icon: 'scan-outline', available: true };
+  // Android reports supported hardware, not what is enrolled, and many
+  // phones (Samsung included) advertise a weak software face unlock next to
+  // the fingerprint sensor. The keystore gate on those phones is the
+  // fingerprint, so name that whenever it is present; face only when it is
+  // the sole option (iOS Face ID, Pixel 4).
   if (auth.hasFingerprintId) {
     return { subtitle: 'Fingerprint on this phone', icon: 'finger-print-outline', available: true };
   }
+  if (auth.hasFaceId) return { subtitle: 'Face unlock on this phone', icon: 'scan-outline', available: true };
   return { subtitle: 'Biometrics on this phone', icon: 'finger-print-outline', available: true };
 };
 
