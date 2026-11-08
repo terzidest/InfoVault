@@ -1,39 +1,116 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
-import { scale } from 'react-native-size-matters';
+// Settings: Security / Appearance / About groups on surface cards, plus a
+// "Lock now" action. Built on the v2 theme primitives; reads tokens only.
+import React, { useCallback, useEffect, useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 
 import useSettingsStore from '../../store/settingsStore';
 import useAuthStore from '../../store/authStore';
 import useAuth from '../../hooks/useAuth';
-import Button from '../../components/ui/Button';
-import Select from '../../components/ui/Select';
+import { checkAuthenticationTypes } from '../../services/authentication';
+import { useTheme } from '../../theme/useTheme';
+import {
+  Screen,
+  Eyebrow,
+  RowTitle,
+  Secondary,
+  Kind,
+  Mono,
+  ListRow,
+  Switch,
+  Segmented,
+  Sheet,
+  ActionButton,
+} from '../../components/ui';
+import type { SegmentedOption } from '../../components/ui';
 import type { ScreenProps } from '../../types/navigation';
-import type { Settings as SettingsType } from '../../types/models';
+import type { AuthTypes, ThemeMode } from '../../types/models';
 
-type ToggleableSettingKey = {
-  [K in keyof SettingsType]: SettingsType[K] extends boolean ? K : never;
-}[keyof SettingsType];
+const THREAT_MODEL_URL = 'https://github.com/terzidest/InfoVault/blob/main/SECURITY.md';
 
-const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
+interface TimeoutOption {
+  value: number;
+  /** Full label for the picker sheet. */
+  label: string;
+  /** Compact trailing value on the row. */
+  short: string;
+}
+
+const TIMEOUT_OPTIONS: readonly TimeoutOption[] = [
+  { value: 60000, label: '1 minute', short: 'After 1 min' },
+  { value: 300000, label: '5 minutes', short: 'After 5 min' },
+  { value: 900000, label: '15 minutes', short: 'After 15 min' },
+  { value: 1800000, label: '30 minutes', short: 'After 30 min' },
+  { value: 3600000, label: '1 hour', short: 'After 1 hour' },
+];
+
+const THEME_OPTIONS: SegmentedOption<ThemeMode>[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+// Pure: subtitle + icon for the biometric row from the device capability.
+const describeBiometrics = (
+  auth: AuthTypes | null
+): { subtitle: string; icon: keyof typeof Ionicons.glyphMap; available: boolean } => {
+  if (!auth) return { subtitle: 'Checking this phone…', icon: 'finger-print-outline', available: false };
+  if (!auth.hasHardware || !auth.isEnrolled) {
+    return { subtitle: 'No fingerprint or face enrolled on this phone', icon: 'finger-print-outline', available: false };
+  }
+  if (auth.hasFingerprintId && auth.hasFaceId) {
+    return { subtitle: 'Biometrics on this phone', icon: 'finger-print-outline', available: true };
+  }
+  if (auth.hasFaceId) return { subtitle: 'Face unlock on this phone', icon: 'scan-outline', available: true };
+  if (auth.hasFingerprintId) {
+    return { subtitle: 'Fingerprint on this phone', icon: 'finger-print-outline', available: true };
+  }
+  return { subtitle: 'Biometrics on this phone', icon: 'finger-print-outline', available: true };
+};
+
+interface GroupProps {
+  title: string;
+  children: React.ReactNode;
+}
+
+// Eyebrow heading + surface card. Rows inside separate themselves with
+// ListRow's `divider`.
+const Group: React.FC<GroupProps> = ({ title, children }) => {
+  const { tokens } = useTheme();
+  return (
+    <View style={{ marginBottom: tokens.spacing.xxl }}>
+      <Eyebrow style={{ marginBottom: tokens.spacing.sm, marginLeft: tokens.spacing.xs }}>{title}</Eyebrow>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: tokens.colors.surface, borderColor: tokens.colors.line, borderRadius: tokens.radius.xl },
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+};
+
+const Settings: React.FC<ScreenProps<'Settings'>> = () => {
+  const { tokens } = useTheme();
+
   // Field-level selectors: skip the isLoading/error interim re-renders.
-  const settings = useSettingsStore((s) => s.settings);
+  const autoLockTimeout = useSettingsStore((s) => s.settings.autoLockTimeout);
+  // v1 list items still read maskSensitiveData; the setting goes away at the v2 cutover.
+  const maskSensitiveData = useSettingsStore((s) => s.settings.maskSensitiveData);
+  const theme = useSettingsStore((s) => s.settings.theme);
   const initSettings = useSettingsStore((s) => s.initSettings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
-  const resetSettings = useSettingsStore((s) => s.resetSettings);
   const { isAuthenticated, updateLastActive, logout } = useAuth();
-  const biometricAvailable = useAuthStore((s) => s.biometricAvailable);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const enableBiometricUnlock = useAuthStore((s) => s.enableBiometricUnlock);
   const disableBiometricUnlock = useAuthStore((s) => s.disableBiometricUnlock);
 
-  const timeoutOptions = [
-    { label: '1 minute', value: 60000 },
-    { label: '5 minutes', value: 300000 },
-    { label: '15 minutes', value: 900000 },
-    { label: '30 minutes', value: 1800000 },
-    { label: '1 hour', value: 3600000 },
-  ];
+  const [authTypes, setAuthTypes] = useState<AuthTypes | null>(null);
+  const [timeoutSheetOpen, setTimeoutSheetOpen] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -41,217 +118,226 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
     }
   }, [isAuthenticated, initSettings]);
 
+  useEffect(() => {
+    let cancelled = false;
+    checkAuthenticationTypes().then((types) => {
+      if (!cancelled) setAuthTypes(types);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
       }
     }, [isAuthenticated, updateLastActive])
   );
 
-  const handleToggleSetting = (key: ToggleableSettingKey) => {
+  const biometrics = describeBiometrics(authTypes);
+  const biometricRowEnabled = biometrics.available;
+
+  const handleBiometricToggle = async (next: boolean) => {
     updateLastActive();
-    updateSettings({ [key]: !settings[key] });
+    if (next) {
+      await enableBiometricUnlock();
+    } else {
+      await disableBiometricUnlock();
+    }
   };
 
-  const handleTimeoutChange = (value: number) => {
+  const handleTimeoutSelect = (value: number) => {
     updateLastActive();
-    updateSettings({ autoLockTimeout: value });
+    setTimeoutSheetOpen(false);
+    if (value !== autoLockTimeout) {
+      updateSettings({ autoLockTimeout: value });
+    }
   };
 
-  const handleResetSettings = () => {
-    Alert.alert(
-      'Reset Settings',
-      'Are you sure you want to reset all settings to their default values?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            await resetSettings();
-            Alert.alert('Settings Reset', 'All settings have been reset to their default values.');
-          },
-        },
-      ]
-    );
+  const handleMaskToggle = (next: boolean) => {
+    updateLastActive();
+    updateSettings({ maskSensitiveData: next });
   };
 
+  const handleThemeChange = (next: ThemeMode) => {
+    updateLastActive();
+    if (next !== theme) {
+      updateSettings({ theme: next });
+    }
+  };
+
+  const handleOpenThreatModel = () => {
+    updateLastActive();
+    Linking.openURL(THREAT_MODEL_URL).catch(() => {});
+  };
+
+  // Navigation to the lock screen happens centrally (AutoLockGate resets
+  // the stack on logout) — never navigate here too, or the stack
+  // accumulates a route per lock cycle.
   const handleLock = () => {
-    Alert.alert(
-      'Lock vault',
-      'Lock InfoVault now? You will need to unlock again to access your data.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Lock',
-          style: 'destructive',
-          onPress: () => {
-            // Navigation to the lock screen happens centrally (AutoLockGate
-            // resets the stack on logout) — never navigate here too, or the
-            // stack accumulates a route per lock cycle.
-            logout();
-          },
-        },
-      ]
-    );
+    logout();
   };
+
+  const currentTimeout = TIMEOUT_OPTIONS.find((o) => o.value === autoLockTimeout);
+  const version = Constants.expoConfig?.version ?? '—';
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Security</Text>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Mask Sensitive Data</Text>
-            <Text style={styles.settingDescription}>
-              Hide sensitive information until explicitly revealed
-            </Text>
-          </View>
-          <Switch
-            value={settings.maskSensitiveData}
-            onValueChange={() => handleToggleSetting('maskSensitiveData')}
-            trackColor={{ false: '#CCCCCC', true: '#4CAF50' }}
-            thumbColor="#FFFFFF"
+    <Screen edges={['bottom']}>
+      <ScrollView
+        contentContainerStyle={{ padding: tokens.spacing.lg, paddingBottom: tokens.spacing.xxxl }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Group title="Security">
+          <ListRow
+            title="Biometric unlock"
+            subtitle={biometrics.subtitle}
+            icon={biometrics.icon}
+            tint={tokens.colors.accent}
+            style={!biometricRowEnabled && styles.disabledRow}
+            trailing={
+              <Switch
+                value={biometricEnabled}
+                onValueChange={handleBiometricToggle}
+                disabled={!biometricRowEnabled}
+                accessibilityLabel="Biometric unlock"
+              />
+            }
           />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Use biometric unlock</Text>
-            <Text style={styles.settingDescription}>
-              {biometricAvailable
-                ? 'Unlock with Face ID or Touch ID instead of typing your master password'
-                : 'No biometric enrolled on this device'}
-            </Text>
-          </View>
-          <Switch
-            value={biometricEnabled}
-            onValueChange={async (next) => {
-              updateLastActive();
-              if (next) {
-                await enableBiometricUnlock();
-              } else {
-                await disableBiometricUnlock();
-              }
-            }}
-            disabled={!biometricAvailable}
-            trackColor={{ false: '#CCCCCC', true: '#4CAF50' }}
-            thumbColor="#FFFFFF"
+          <ListRow
+            divider
+            title="Auto-lock"
+            subtitle="Also when the app leaves the foreground"
+            icon="time-outline"
+            tint={tokens.colors.tints.idDocument}
+            onPress={() => setTimeoutSheetOpen(true)}
+            accessibilityLabel={`Auto-lock, ${currentTimeout?.short ?? 'Choose a timeout'}`}
+            trailing={
+              <View style={styles.trailingRow}>
+                <Secondary>{currentTimeout?.short ?? '—'}</Secondary>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={tokens.colors.quiet}
+                  style={{ marginLeft: tokens.spacing.xs }}
+                />
+              </View>
+            }
           />
-        </View>
+          <ListRow
+            divider
+            title="Mask sensitive values"
+            icon="eye-off-outline"
+            tint={tokens.colors.tints.note}
+            trailing={
+              <Switch
+                value={maskSensitiveData}
+                onValueChange={handleMaskToggle}
+                accessibilityLabel="Mask sensitive values"
+              />
+            }
+          />
+          <ListRow
+            divider
+            title="Screen privacy"
+            subtitle="Screenshots and recording blocked while unlocked"
+            icon="shield-checkmark-outline"
+            tint={tokens.colors.ok}
+            accessibilityLabel="Screen privacy, screenshots and recording blocked while unlocked, always on"
+            trailing={<Kind color={tokens.colors.ok}>Always on</Kind>}
+          />
+        </Group>
 
-        <View style={styles.pickerSettingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Auto-Lock Timeout</Text>
-            <Text style={styles.settingDescription}>
-              Automatically lock after a period of inactivity
-            </Text>
-          </View>
-          <View style={styles.pickerSpacing}>
-            <Select
-              value={settings.autoLockTimeout}
-              onValueChange={handleTimeoutChange}
-              options={timeoutOptions}
+        <Group title="Appearance">
+          <View style={{ padding: tokens.spacing.lg }}>
+            <RowTitle style={{ marginBottom: tokens.spacing.md }}>Theme</RowTitle>
+            <Segmented
+              options={THEME_OPTIONS}
+              value={theme}
+              onChange={handleThemeChange}
+              accessibilityLabel="Theme"
             />
           </View>
+        </Group>
+
+        <Group title="About">
+          <ListRow
+            title="InfoVault"
+            subtitle="Local-first. Nothing leaves this device."
+            icon="lock-closed-outline"
+            tint={tokens.colors.accent}
+            accessibilityLabel={`InfoVault version ${version}. Local-first. Nothing leaves this device.`}
+            trailing={<Mono variant="value">{version}</Mono>}
+          />
+          <ListRow
+            divider
+            title="Threat model"
+            subtitle="What InfoVault protects against, and what it does not"
+            icon="document-text-outline"
+            tint={tokens.colors.icon}
+            onPress={handleOpenThreatModel}
+            accessibilityLabel="Threat model, opens in browser"
+            trailing={<Ionicons name="open-outline" size={18} color={tokens.colors.quiet} />}
+          />
+        </Group>
+
+        <ActionButton
+          title="Lock now"
+          variant="ghostDanger"
+          onPress={handleLock}
+          accessibilityLabel="Lock vault now"
+          leading={<Ionicons name="lock-closed" size={18} color={tokens.colors.bad} />}
+        />
+      </ScrollView>
+
+      <Sheet visible={timeoutSheetOpen} onClose={() => setTimeoutSheetOpen(false)} title="Auto-lock after">
+        <View accessibilityRole="radiogroup">
+          {TIMEOUT_OPTIONS.map((option, index) => {
+            const selected = option.value === autoLockTimeout;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityLabel={option.label}
+                accessibilityState={{ selected, checked: selected }}
+                onPress={() => handleTimeoutSelect(option.value)}
+                style={({ pressed }) => [
+                  styles.option,
+                  index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: tokens.colors.line2 },
+                  pressed && { backgroundColor: tokens.colors.wash },
+                ]}
+              >
+                <RowTitle color={selected ? tokens.colors.accent : tokens.colors.text}>{option.label}</RowTitle>
+                {selected ? <Ionicons name="checkmark" size={20} color={tokens.colors.accent} /> : null}
+              </Pressable>
+            );
+          })}
         </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-
-        <View style={styles.aboutItem}>
-          <Text style={styles.aboutLabel}>Version</Text>
-          <Text style={styles.aboutValue}>1.0.0 (MVP)</Text>
-        </View>
-
-        <View style={styles.aboutItem}>
-          <Text style={styles.aboutLabel}>Developer</Text>
-          <Text style={styles.aboutValue}>InfoVault Team</Text>
-        </View>
-      </View>
-
-      <View style={styles.actionButtonsContainer}>
-        <Button variant="outline" style={styles.actionButton} onPress={handleResetSettings}>
-          Reset Settings
-        </Button>
-
-        <Button style={styles.actionButton} onPress={handleLock}>
-          Lock
-        </Button>
-      </View>
-    </ScrollView>
+      </Sheet>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+  card: {
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  section: {
-    padding: scale(16),
-    paddingBottom: scale(8),
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+  trailingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: scale(16),
-    fontWeight: '600',
-    color: '#006E90',
-    marginBottom: scale(12),
+  disabledRow: {
+    opacity: 0.6,
   },
-  settingItem: {
+  option: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: scale(10),
-  },
-  pickerSettingItem: {
-    paddingVertical: scale(10),
-  },
-  settingInfo: {
-    flex: 1,
-    paddingRight: scale(12),
-  },
-  settingTitle: {
-    fontSize: scale(15),
-    fontWeight: '500',
-    color: '#333333',
-    marginBottom: scale(2),
-  },
-  settingDescription: {
-    fontSize: scale(12),
-    color: '#666666',
-  },
-  pickerSpacing: {
-    marginTop: scale(8),
-  },
-  aboutItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: scale(10),
-  },
-  aboutLabel: {
-    fontSize: scale(14),
-    color: '#666666',
-  },
-  aboutValue: {
-    fontSize: scale(14),
-    color: '#333333',
-    fontWeight: '500',
-  },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: scale(16),
-  },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: scale(4),
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
 });
 
