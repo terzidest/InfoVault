@@ -1,6 +1,6 @@
 # InfoVault v2 Architecture
 
-InfoVault v2 is a local-first vault for the things people write on scraps of paper: passwords, Greek ΑΦΜ and ΑΜΚΑ, SIM PINs, card details, Wi‑Fi passwords. Everything is encrypted on the phone under a key the user's master password unlocks, and nothing ever touches the network. This document describes the target design agreed in [INFOVAULT_V2_SPEC.md](INFOVAULT_V2_SPEC.md); the threat model is in [SECURITY.md](SECURITY.md).
+InfoVault v2 is a local-first vault for the things people write on scraps of paper: passwords, Greek ΑΦΜ and ΑΜΚΑ, SIM PINs, card details, Wi‑Fi passwords. Everything is encrypted on the phone under a key the user's master password unlocks, and nothing ever touches the network. This document describes the design on `main`, as agreed in [INFOVAULT_V2_SPEC.md](INFOVAULT_V2_SPEC.md); items not yet shipped are marked *planned*. The threat model is in [SECURITY.md](SECURITY.md).
 
 ## Stack
 
@@ -14,7 +14,7 @@ Fourteen choices, all current and all with a reason; the two that changed from v
 | Navigation | React Navigation 7, native stack, typed `RootStackParamList` | Five screens; file routing and deep links would add nothing, and URL-openable screens are a liability in a vault |
 | State | Zustand: `authStore`, `recordsStore`, `settingsStore` | One store per concern, in-memory only, hooks with field selectors |
 | Record encryption | AES-256-GCM via `@noble/ciphers` | Audited, pure TypeScript, authenticated; 96-bit nonce, 128-bit tag |
-| Key derivation | Argon2id via `react-native-quick-crypto` (native); PBKDF2-SHA256 kept for reading v1 vaults | Memory-hard, OWASP's first choice; native so real parameters (64 MiB, 3 passes) fit an unlock |
+| Key derivation | PBKDF2-SHA256 (100k) today; *planned:* Argon2id via `react-native-quick-crypto` (native), with PBKDF2 kept for reading older vaults | Memory-hard, OWASP's first choice; native so real parameters (64 MiB, 3 passes) fit an unlock |
 | Randomness | `expo-crypto` (`getRandomBytesAsync`, `randomUUID`) | Platform CSPRNG; `Math.random()` and noble's WebCrypto-based `randomBytes` are never used |
 | Record storage | One sealed file, `vault.bin`, via `expo-file-system` | No per-value size cap, one read at unlock, one atomic write per change |
 | Key storage | `expo-secure-store` (iOS Keychain / Android Keystore) | Holds only the vault header and the biometric-gated key copy, which is what a keystore is for |
@@ -33,7 +33,7 @@ flowchart TB
         direction LR
         unlock["Unlock<br/><i>biometrics or password</i>"]
         main["Home, Record, Add/Edit<br/><i>search, pinned, fields by kind</i>"]
-        settings["Settings<br/><i>lock, theme, export, password</i>"]
+        settings["Settings<br/><i>lock, theme; planned: export, password</i>"]
     end
     subgraph stores["Stores: Zustand, in-memory state and logic"]
         direction LR
@@ -44,13 +44,13 @@ flowchart TB
     subgraph services["Services: the side-effect boundary"]
         direction LR
         vaultFile["vaultFile<br/><i>read and write vault.bin</i>"]
-        secureKeys["secureKeys<br/><i>header, biometric key copy</i>"]
-        exportImport["exportImport<br/><i>same format as vault.bin</i>"]
+        migrateV1["migrateV1 + legacyVault<br/><i>v1 entries → vault.bin</i>"]
+        exportImport["exportImport (planned)<br/><i>same format as vault.bin</i>"]
     end
     subgraph crypto["Crypto utils: pure, no side effects"]
         direction LR
         aes["AES-256-GCM<br/><i>@noble/ciphers</i>"]
-        argon["Argon2id<br/><i>quick-crypto, native</i>"]
+        argon["PBKDF2 today, Argon2id planned<br/><i>key wrapping</i>"]
     end
     subgraph platform["Platform: native modules"]
         direction LR
@@ -63,7 +63,7 @@ flowchart TB
     services -- "native modules" --> platform
 ```
 
-Screens never touch storage; they read the stores through hooks and call store actions. Stores hold the vault key and the decrypted records in memory and contain the business logic. Services are the one place that reads or writes the device: the vault file, the two SecureStore entries, the share sheet. They call the pure crypto functions with the key the store hands them. Biometrics, clipboard and screen-capture services sit in the same layer and are left out of the picture for room. Same shape as v1, with the three domain stores collapsed into `recordsStore` and `secureStorage.ts` replaced by `vaultFile.ts`.
+Screens never touch storage; they read the stores through hooks and call store actions. Stores hold the vault key and the decrypted records in memory and contain the business logic. Services are the one place that reads or writes the device: the vault file, the v1 SecureStore layout during migration, and (planned) the share sheet. They call the pure crypto functions with the key the store hands them; the sealed container itself is a pure codec (`utils/vaultFormat.ts`). The two SecureStore entries for key material (header, biometric copy) are written by `authStore` directly, since they are its own state rather than records. Biometrics, clipboard and screen-capture services sit in the same layer and are left out of the picture for room. Same shape as v1, with the three domain stores collapsed into `recordsStore` and `secureStorage.ts` replaced by `vaultFile.ts` (its v1 layout names survive in `legacyVault.ts` for the migration).
 
 ## Records and the vault file
 
@@ -140,8 +140,8 @@ The vault key is random and never changes when the password or the KDF does; onl
 1. Read the header; derive the wrapping key from the typed password with the header's KDF parameters and salt.
 2. Unwrap the vault key. A tag failure means a wrong password.
 3. Zero the wrapping key. If the header's KDF parameters are older than the app's current ones, re-wrap the vault key with the current ones and rewrite the header; 32 bytes change, records do not.
-4. Read `vault.bin`, open it with the vault key, hand the records to `recordsStore`.
-5. If biometric unlock is on, re-store the key copy. This repairs an entry the OS invalidated after an enrollment change, and these writes never prompt.
+4. Put the key in `authStore` and call `recordsStore.open()`: it runs the v1 migration if any v1 entries remain, reads `vault.bin` (recovering `.bak` if needed) and publishes the records. `open()` resolves `true` when the records are in memory, `false` when the vault locked meanwhile, and throws when the file cannot be opened — in which case the key is zeroed again, nothing is marked unlocked and the screen shows a neutral error. Only after `true` is the session authenticated.
+5. If biometric unlock is on and a biometric unlock previously found the keystore entry gone, re-store the key copy. This repairs an entry the OS invalidated after an enrollment change; it is done only after such a failure because on Android the gated write itself prompts.
 
 ### Unlock with biometrics
 
@@ -162,18 +162,18 @@ Every change rewrites the whole vault file atomically; the backup file is that s
 
 ### Writing a change
 
-1. The store applies the change to the in-memory records and calls `vaultFile.save(records, vaultKey)`.
+1. The store computes the next full record set on a serial queue, validates every record (shape and the 64 KB cap) and calls `writeVault(payload, vaultKey, isLiveKey)`.
 2. The service serializes all records and seals them with the vault key and a fresh random nonce.
-3. It writes `vault.bin.tmp`, then moves it over `vault.bin`. A crash before the move leaves the previous file intact.
-4. If the vault locked while sealing (the key bytes were zeroed), the write is abandoned rather than persisted under a dead key. v1 has this check; it stays.
+3. It writes `vault.bin.tmp`, moves the current `vault.bin` to `vault.bin.bak`, moves `.tmp` into place and drops `.bak`. A crash at any step leaves a decodable file, and the next read restores the last acknowledged one.
+4. If the vault locked while sealing (the key bytes were zeroed), the write is abandoned rather than persisted under a dead key. v1 had this check; it stays. Only after the write lands does the store publish the new records to state.
 
-### Export
+### Export (planned)
 
 1. Settings → Export asks for the master password again: it confirms intent and lets the wrapping key be derived fresh.
 2. The export file is the vault header plus the sealed blob, the same bytes and format as on disk.
 3. The file goes to the OS share sheet. Where it ends up is the user's choice; the app never knows.
 
-### Import
+### Import (planned)
 
 1. Pick a file; read its header.
 2. Derive the wrapping key from the typed password with the file's own KDF parameters and salt; unwrap its vault key; open the blob.
@@ -184,7 +184,7 @@ Every change rewrites the whole vault file atomically; the backup file is that s
 1. The header migration already exists ([PR #28](https://github.com/terzidest/InfoVault/pull/28)): the v1 salt and verifier become a header, and the v1 password-derived key becomes the vault key, so nothing is re-encrypted.
 2. Each v1 record is read from SecureStore, decrypted with the vault key and mapped: `Credential` → Login, `PersonalInfo` → ID document (or ID number when only the identifier is set), `Note` → Note with its category as a tag.
 3. `vault.bin` is written. Only then are the v1 entries and their key registries deleted. An interruption before that point leaves v1 intact and the migration retries next unlock.
-4. iOS keeps Keychain entries across an uninstall. A header with no `vault.bin` and no v1 entries means a fresh install: the stale header and biometric copy are cleared and setup runs.
+4. iOS keeps Keychain entries across an uninstall. Key material (header, legacy salt or setup flag) with no `vault.bin` (nor a `.bak`) and no v1 entries means a fresh install or an interrupted setup: the header, legacy entries, biometric copy and setup flag are cleared and setup runs. Setup also removes any stale vault file before writing the new empty one.
 
 ## Decisions
 
@@ -212,4 +212,4 @@ Ten choices with the alternative each one beat. The first four change what v1 di
 
 ---
 
-*Describes the v2 target, not the current `main`. Update it in the same change as any decision it records.*
+*Describes `main`; sections marked planned (Argon2id, export/import, change password, the Unlock/Setup redesign) are not shipped yet. Update it in the same change as any decision it records.*
