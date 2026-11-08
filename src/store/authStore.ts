@@ -118,6 +118,11 @@ interface AuthState {
   encryptionKey: Uint8Array | null;
   biometricAvailable: boolean;
   biometricEnabled: boolean;
+  // Set when a biometric unlock found the keystore entry gone or unreadable
+  // (OS enrollment change invalidates it). The next password unlock re-stores
+  // the key copy. In-memory only; it never needs to survive a restart because
+  // the same biometric failure will set it again.
+  biometricRepairNeeded: boolean;
   init: () => Promise<void>;
   setupMasterPassword: (password: string) => Promise<boolean>;
   unlockWithPassword: (password: string) => Promise<boolean>;
@@ -138,6 +143,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
   encryptionKey: null,
   biometricAvailable: false,
   biometricEnabled: false,
+  biometricRepairNeeded: false,
 
   init: async () => {
     set({ isLoading: true });
@@ -225,17 +231,21 @@ const useAuthStore = create<AuthState>((set, get) => ({
         authError: null,
       });
 
-      // Self-heal biometric unlock: OS biometric enrollment changes can
-      // permanently invalidate the keystore entry (biometric unlock then
-      // fails silently while the setting still claims enabled). Re-storing
-      // the key on every password unlock repairs it — writes to auth-gated
-      // entries don't prompt on either platform. Best-effort.
-      if (get().biometricEnabled) {
+      // Self-heal biometric unlock: an OS enrollment change permanently
+      // invalidates the keystore entry, so biometric unlock fails while the
+      // setting still claims enabled. Re-store the key copy — but only after
+      // a biometric unlock has actually hit that, because on Android an
+      // auth-gated write itself shows the biometric prompt (the cipher goes
+      // through BiometricPrompt). Doing it on every password unlock put a
+      // fingerprint prompt on the Home screen. Best-effort.
+      if (get().biometricEnabled && get().biometricRepairNeeded) {
         SecureStore.setItemAsync(BIOMETRIC_KEY_STORE, bytesToHex(key), {
           requireAuthentication: true,
-          authenticationPrompt: 'Enable biometric unlock for InfoVault',
+          authenticationPrompt: 'Re-enable biometric unlock for InfoVault',
           keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-        }).catch(() => {});
+        })
+          .then(() => set({ biometricRepairNeeded: false }))
+          .catch(() => {});
       }
       return true;
     } catch (error) {
@@ -253,7 +263,9 @@ const useAuthStore = create<AuthState>((set, get) => ({
         authenticationPrompt: 'Unlock InfoVault',
       });
       if (!keyHex) {
-        set({ isLoading: false });
+        // Entry missing or invalidated (Android reads an invalidated entry
+        // back as null): queue a re-store for the next password unlock.
+        set({ isLoading: false, biometricRepairNeeded: get().biometricEnabled });
         return false;
       }
       const sessionKey = hexToBytes(keyHex);
@@ -265,10 +277,12 @@ const useAuthStore = create<AuthState>((set, get) => ({
         authError: null,
       });
       return true;
-    } catch {
-      // User cancelled the OS prompt, or biometric retrieval failed.
+    } catch (error) {
       // Stay locked; the password fallback remains available on the screen.
-      set({ isLoading: false });
+      // A dismissed prompt is not a broken entry ("User canceled …" on both
+      // platforms); anything else is treated as the entry being unreadable.
+      const cancelled = error instanceof Error && /cancel/i.test(error.message);
+      set({ isLoading: false, biometricRepairNeeded: !cancelled && get().biometricEnabled });
       return false;
     }
   },
@@ -287,7 +301,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
         keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
       });
       await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'true');
-      set({ biometricEnabled: true });
+      set({ biometricEnabled: true, biometricRepairNeeded: false });
       return true;
     } catch (error) {
       console.error('Biometric enable error', error);
@@ -302,7 +316,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('Biometric disable error', error);
     }
-    set({ biometricEnabled: false });
+    set({ biometricEnabled: false, biometricRepairNeeded: false });
   },
 
   logout: () => {
