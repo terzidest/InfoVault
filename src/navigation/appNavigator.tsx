@@ -3,6 +3,7 @@ import { NavigationContainer, createNavigationContainerRef } from "@react-naviga
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Home from "../screens/Home";
+import RecordScreen from "../screens/RecordScreen";
 import Authentication from "../screens/auth/Authentication";
 import SetupMasterPassword from "../screens/auth/SetupMasterPassword";
 import CredentialsList from "../screens/credentials/CredentialsList";
@@ -71,6 +72,11 @@ const AppNavigator: React.FC = () => {
             headerShown: false,
             gestureEnabled: false,
           }}
+        />
+        <Stack.Screen
+          name="Record"
+          component={RecordScreen}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="CredentialsList"
