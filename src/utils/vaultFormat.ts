@@ -73,7 +73,7 @@ export class VaultFileAuthError extends Error {
 // Validators
 // ---------------------------------------------------------------------------
 
-const isStringArray = (value: unknown): value is string[] =>
+export const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((v) => typeof v === 'string');
 
 // Minimal structural check: enough to keep the store from crashing on a

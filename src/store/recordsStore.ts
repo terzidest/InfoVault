@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import useAuthStore from './authStore';
 import { createOpTracker } from './opTracker';
-import { requireKey } from './vaultKey';
+import { isLiveKey, requireKey } from './vaultKey';
 import { migrateV1 } from '../services/migrateV1';
 import { readVaultPayload, writeVault } from '../services/vaultFile';
 import { generateSecureId } from '../utils/crypto';
 import { errorMessage } from '../utils/errors';
-import { MAX_RECORD_BYTES, serializedSize } from '../utils/records';
+import { MAX_RECORD_BYTES, serializedSize, touchRecord } from '../utils/records';
 import { isVaultRecord } from '../utils/vaultFormat';
 import type { VaultRecord, VaultRecordInput } from '../types/models';
 
@@ -63,8 +63,7 @@ let migratedV1Ids: string[] = [];
 
 // logout() zeroes the key bytes in place and drops the reference, so a
 // reference comparison detects a lock that happened during an await.
-const isCurrent = (key: Uint8Array, gen: number): boolean =>
-  useAuthStore.getState().encryptionKey === key && generation === gen;
+const isCurrent = (key: Uint8Array, gen: number): boolean => isLiveKey(key) && generation === gen;
 
 const assertSize = (record: VaultRecord): void => {
   const bytes = serializedSize(record);
@@ -93,8 +92,9 @@ interface Mutation<T> {
 
 const useRecordsStore = create<RecordsState>((set, get) => {
   // Runs `compute` against the records as they are once the queue reaches this
-  // task (not as they were when it was called), persists, then publishes —
-  // unless the vault was locked or cleared in the meantime.
+  // task (not as they were when it was called), validates every record (shape
+  // and size cap), persists, then publishes — unless the vault was locked or
+  // cleared in the meantime.
   const mutate = <T>(label: string, compute: (records: VaultRecord[]) => Mutation<T>): Promise<T> =>
     enqueue(async () => {
       const gen = generation;
@@ -106,8 +106,12 @@ const useRecordsStore = create<RecordsState>((set, get) => {
         // set over the real vault.
         if (!get().isOpen) throw new Error('Vault is not open');
         const { records, result } = compute(get().records);
-        await writeVault({ records, migratedV1Ids }, key); // lock-checked after sealing
-        if (isCurrent(key, gen)) set({ records });
+        records.forEach(assertValid);
+        await writeVault({ records, migratedV1Ids }, key, isLiveKey); // lock-checked after sealing
+        // The write stands on disk, but the lock already evicted memory: the
+        // caller must not treat this as a published change (and navigate on).
+        if (!isCurrent(key, gen)) throw new Error('Vault is locked');
+        set({ records });
         return result;
       } catch (error) {
         // A lock or clear() during the write is why it failed; the caller
@@ -148,7 +152,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
           // Always runs: it is one registry probe when there is nothing to
           // migrate, and it retries entries an earlier pass had to leave
           // behind. It writes vault.bin itself when it migrates anything.
-          const migration = await migrateV1(key).catch((error: unknown) => {
+          const migration = await migrateV1(key, isLiveKey).catch((error: unknown) => {
             // v1 stays put for the next unlock; the existing vault still loads.
             console.warn('v1 migration failed; will retry on the next unlock', error instanceof Error ? error.name : '');
             return null;
@@ -178,15 +182,13 @@ const useRecordsStore = create<RecordsState>((set, get) => {
         const now = nowIso();
         // Spread first so a stray id/timestamp on the input can never win.
         const record: VaultRecord = { ...input, id: generateSecureId(), createdAt: now, updatedAt: now };
-        assertValid(record);
         return { records: [...records, record], result: record };
       }),
 
     update: (id, patch) =>
       mutate('updating', (records) => {
         const existing = findOrThrow(records, id);
-        const updated: VaultRecord = { ...existing, ...sanitizePatch(patch), updatedAt: nowIso() };
-        assertValid(updated);
+        const updated = touchRecord({ ...existing, ...sanitizePatch(patch) }, nowIso());
         return { records: records.map((r) => (r.id === id ? updated : r)), result: updated };
       }),
 
@@ -199,7 +201,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
     togglePin: (id) =>
       mutate('pinning', (records) => {
         const existing = findOrThrow(records, id);
-        const updated: VaultRecord = { ...existing, pinned: !existing.pinned, updatedAt: nowIso() };
+        const updated = touchRecord({ ...existing, pinned: !existing.pinned }, nowIso());
         return { records: records.map((r) => (r.id === id ? updated : r)), result: updated };
       }),
 

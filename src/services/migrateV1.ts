@@ -1,9 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 import { decryptRecord, generateSecureId, isRecord } from '../utils/crypto';
 import { fromV1Credential, fromV1Note, fromV1PersonalInfo, timestamp } from '../utils/records';
-import { isVaultRecord } from '../utils/vaultFormat';
+import { isStringArray, isVaultRecord } from '../utils/vaultFormat';
 import { STORAGE_TYPES, registryKey } from './secureStorage';
 import { readVaultPayload, writeVault } from './vaultFile';
+import type { IsKeyLive } from './vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../types/models';
 import type { StorageType } from '../types/storage';
 
@@ -26,9 +27,11 @@ import type { StorageType } from '../types/storage';
 // registry is left untouched along with everything it names.
 //
 // The vault payload remembers every v1 id ever converted (`migratedV1Ids`).
-// On a retry — e.g. the cleanup after a successful write was interrupted — an
-// entry whose id is remembered but no longer among the records was deleted
-// in v2 after it migrated: it is not resurrected, and its v1 copy is removed.
+// On a retry — e.g. the cleanup after a successful write was interrupted — a
+// remembered id that is still among the records is simply cleaned up (no
+// decrypt, no rewrite), and one that is no longer among them was deleted in
+// v2 after it migrated: it is not resurrected, and its v1 copy is removed.
+// The vault is rewritten only when something new came in.
 
 export interface MigrationResult {
   // False when no v1 registry exists at all; `records` is then empty and the
@@ -61,7 +64,7 @@ export const hasV1Data = async (): Promise<boolean> => (await readRegistries()).
 const parseRegistry = (raw: string): string[] | null => {
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.every((id) => typeof id === 'string') ? parsed : null;
+    return isStringArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -80,8 +83,9 @@ const OPTIONAL_FIELDS: Record<StorageType, readonly string[]> = {
 // v1 never validated what it stored. Coerce each known optional field to the
 // string the mappers expect: strings are trimmed, numbers and booleans are
 // stringified (a numeric username is still a username), anything else is
-// dropped. Required strings (id, title, timestamps) are left for the record
-// guard: a record missing them is a leftover, not a guess.
+// dropped. Missing timestamps default to each other, then to now; id and
+// title are left for the record guard: a record missing them is a leftover,
+// not a guess.
 const coerce = (value: unknown): string | undefined => {
   if (typeof value === 'string') return value.trim();
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -97,6 +101,11 @@ const normalizeV1 = (type: StorageType, item: Record<string, unknown>): Record<s
   }
   if (type === 'personalInfo') out.type = typeof item.type === 'string' ? item.type : 'Other';
   if (type === 'note' && out.category === undefined) out.category = '';
+  const createdAt = typeof item.createdAt === 'string' ? item.createdAt : undefined;
+  const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : undefined;
+  const now = new Date().toISOString();
+  out.createdAt = createdAt ?? updatedAt ?? now;
+  out.updatedAt = updatedAt ?? createdAt ?? now;
   return out;
 };
 
@@ -155,7 +164,7 @@ const merge = (existing: readonly VaultRecord[], incoming: readonly VaultRecord[
   return [...byId.values()];
 };
 
-export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> => {
+export const migrateV1 = async (vaultKey: Uint8Array, isKeyLive: IsKeyLive): Promise<MigrationResult> => {
   const registries = await readRegistries();
   if (registries.length === 0) {
     return { hadV1: false, migrated: 0, skipped: 0, records: [], migratedV1Ids: [] };
@@ -164,7 +173,6 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
   // readVaultPayload (not a vaultExists gate) so a vault whose last commit was
   // interrupted is recovered and merged with, never overwritten.
   const existing = (await readVaultPayload(vaultKey)) ?? { records: [], migratedV1Ids: [] };
-  const presentIds = new Set(existing.records.map((r) => r.id));
   const remembered = new Set(existing.migratedV1Ids);
 
   const incoming: VaultRecord[] = [];
@@ -190,8 +198,9 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
         plan.done.push(id);
         return;
       }
-      if (remembered.has(id) && !presentIds.has(id)) {
-        // Migrated earlier, then deleted in v2: do not resurrect it.
+      if (remembered.has(id)) {
+        // Migrated earlier. Still present: nothing to redo. Gone: deleted in
+        // v2 since — do not resurrect it. Either way only the v1 copy goes.
         plan.done.push(id);
         return;
       }
@@ -211,7 +220,7 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
   const migratedV1Ids = [...new Set([...existing.migratedV1Ids, ...incoming.map((r) => r.id)])];
   if (incoming.length > 0) {
     // Lock-checked: a logout during the write throws here, before any deletion.
-    await writeVault({ records, migratedV1Ids }, vaultKey);
+    await writeVault({ records, migratedV1Ids }, vaultKey, isKeyLive);
   }
 
   // Only now is it safe to let go of the v1 copies. Cleanup is best-effort:

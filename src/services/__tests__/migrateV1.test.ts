@@ -5,7 +5,8 @@ import useAuthStore from '../../store/authStore';
 import * as crypto from '../../utils/crypto';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
 import { hasV1Data, migrateV1 } from '../migrateV1';
-import { encodeVault, readVault, readVaultPayload, vaultExists, writeVault } from '../vaultFile';
+import { isLiveKey } from '../../store/vaultKey';
+import { encodeVault, readVaultPayload, vaultExists, writeVault } from '../vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../../types/models';
 
 const fsMock = FileSystem as unknown as {
@@ -16,6 +17,9 @@ const fsMock = FileSystem as unknown as {
 const secureStoreMock = SecureStore as unknown as { __store: Map<string, string>; __reset: () => void };
 
 let key: Uint8Array;
+
+const write = (records: readonly VaultRecord[], k: Uint8Array) => writeVault({ records }, k, isLiveKey);
+const read = async (k: Uint8Array) => (await readVaultPayload(k))?.records ?? null;
 
 const T1 = '2026-01-01T00:00:00.000Z';
 const T2 = '2026-01-05T00:00:00.000Z';
@@ -60,11 +64,11 @@ describe('hasV1Data', () => {
 describe('migrateV1', () => {
   it('moves every v1 record into vault.bin with the expected templates and tags, then deletes the v1 copies', async () => {
     await seedV1(key);
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(4);
     expect(result.skipped).toBe(0);
 
-    const onDisk = await readVault(key);
+    const onDisk = await read(key);
     expect(onDisk).toEqual(result.records);
     const records = byId(onDisk ?? []);
     expect(records.size).toBe(4);
@@ -91,27 +95,27 @@ describe('migrateV1', () => {
     await seedV1(key);
     const before = new Map(secureStoreMock.__store);
     fsMock.__failNextWrite('vault.bin.tmp');
-    await expect(migrateV1(key)).rejects.toThrow('simulated write failure');
+    await expect(migrateV1(key, isLiveKey)).rejects.toThrow('simulated write failure');
     expect(secureStoreMock.__store).toEqual(before);
     expect(vaultExists()).toBe(false);
     expect(await hasV1Data()).toBe(true);
 
     // The retry succeeds and yields exactly the four records.
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(4);
-    expect((await readVault(key))?.length).toBe(4);
+    expect((await read(key))?.length).toBe(4);
   });
 
   it('is idempotent: rerunning after the v1 cleanup was interrupted produces no duplicates', async () => {
     await seedV1(key);
-    await migrateV1(key);
+    await migrateV1(key, isLiveKey);
     // Simulate the cleanup not having happened (vault written, v1 still there).
     await seedV1(key);
     expect(await hasV1Data()).toBe(true);
 
-    const result = await migrateV1(key);
-    expect(result.migrated).toBe(4);
-    const onDisk = await readVault(key);
+    const result = await migrateV1(key, isLiveKey);
+    expect(result.migrated).toBe(0); // already there: nothing re-converted
+    const onDisk = await read(key);
     expect(onDisk?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'n1', 'p1']);
     expect(await hasV1Data()).toBe(false);
   });
@@ -121,10 +125,10 @@ describe('migrateV1', () => {
     const otherKey = await generateVaultKey();
     secureStoreMock.__store.set('c2', await encryptRecord(CREDS[1], otherKey));
 
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(3);
     expect(result.skipped).toBe(1);
-    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c1', 'n1', 'p1']);
+    expect((await read(key))?.map((r) => r.id).sort()).toEqual(['c1', 'n1', 'p1']);
 
     expect(secureStoreMock.__store.has('c1')).toBe(false);
     expect(secureStoreMock.__store.has('c2')).toBe(true);
@@ -148,11 +152,11 @@ describe('migrateV1', () => {
     };
     const older: VaultRecord = { ...newer, id: 'c2', title: 'Stale', pinned: false, updatedAt: T1 };
     const unrelated: VaultRecord = { ...newer, id: 'z9', title: 'Only in vault', updatedAt: T1 };
-    await writeVault([newer, older, unrelated], key);
+    await write([newer, older, unrelated], key);
 
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(4);
-    const records = byId((await readVault(key)) ?? []);
+    const records = byId((await read(key)) ?? []);
     expect(records.size).toBe(5);
     expect(records.get('c1')?.title).toBe('Gmail (edited in v2)');
     expect(records.get('c1')?.pinned).toBe(true);
@@ -162,14 +166,14 @@ describe('migrateV1', () => {
   });
 
   it('reports hadV1 false, without reading the vault, when no registry exists', async () => {
-    await writeVault([{ ...CREDS[0]!, template: 'login', fields: [], pinned: false, tags: [] } as VaultRecord], key);
-    const result = await migrateV1(key);
+    await write([{ ...CREDS[0]!, template: 'login', fields: [], pinned: false, tags: [] } as VaultRecord], key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result).toEqual({ hadV1: false, migrated: 0, skipped: 0, records: [], migratedV1Ids: [] });
   });
 
   it('drops dangling registry ids without writing a vault', async () => {
     secureStoreMock.__store.set('credentialKeys', JSON.stringify(['ghost']));
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result).toEqual({ hadV1: true, migrated: 0, skipped: 0, records: [], migratedV1Ids: [] });
     expect(vaultExists()).toBe(false);
     expect(await hasV1Data()).toBe(false);
@@ -178,9 +182,9 @@ describe('migrateV1', () => {
   it('leaves a corrupt registry and every entry it names in place, and migrates the other types', async () => {
     await seedV1(key);
     secureStoreMock.__store.set('noteKeys', 'not json');
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(3);
-    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'p1']);
+    expect((await read(key))?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'p1']);
     expect(secureStoreMock.__store.get('noteKeys')).toBe('not json');
     expect(secureStoreMock.__store.has('n1')).toBe(true);
     expect(secureStoreMock.__store.has('credentialKeys')).toBe(false);
@@ -190,16 +194,16 @@ describe('migrateV1', () => {
 
   it('keeps a v1 entry that decrypts but does not map to a valid record', async () => {
     await seedV1(key);
-    const { createdAt: _dropped, ...noCreatedAt } = CREDS[0]!;
-    secureStoreMock.__store.set('c1', await encryptRecord(noCreatedAt, key));
-    const result = await migrateV1(key);
+    // A non-string title cannot be coerced into a record.
+    secureStoreMock.__store.set('c1', await encryptRecord({ ...CREDS[0], title: 7 }, key));
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(3);
     expect(result.skipped).toBe(1);
     expect(secureStoreMock.__store.has('c1')).toBe(true);
     expect(JSON.parse(secureStoreMock.__store.get('credentialKeys') ?? '')).toEqual(['c1']);
-    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c2', 'n1', 'p1']);
+    expect((await read(key))?.map((r) => r.id).sort()).toEqual(['c2', 'n1', 'p1']);
     // What was written decodes cleanly on the next read.
-    await expect(readVault(key)).resolves.toHaveLength(3);
+    await expect(read(key)).resolves.toHaveLength(3);
   });
 
   it('anything thrown while converting an entry makes it a leftover, not an abort', async () => {
@@ -210,13 +214,13 @@ describe('migrateV1', () => {
     jest.spyOn(crypto, 'decryptRecord').mockImplementationOnce(() => {
       throw new TypeError('unexpected shape');
     });
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(3);
     expect(result.skipped).toBe(1);
     expect(secureStoreMock.__store.has('c1')).toBe(true); // the TypeError'd one (first read)
     expect(JSON.parse(secureStoreMock.__store.get('credentialKeys') ?? '')).toEqual(['c1']);
     expect(secureStoreMock.__store.has('n1')).toBe(false);
-    expect(byId((await readVault(key)) ?? []).get('n1')?.tags).toEqual(['5']);
+    expect(byId((await read(key)) ?? []).get('n1')?.tags).toEqual(['5']);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('1 record(s)'));
   });
 
@@ -228,11 +232,11 @@ describe('migrateV1', () => {
       if (k === 'c2') throw new Error('keystore unavailable');
       return realGet(k, o);
     });
-    await expect(migrateV1(key)).rejects.toThrow('keystore unavailable');
+    await expect(migrateV1(key, isLiveKey)).rejects.toThrow('keystore unavailable');
     expect(secureStoreMock.__store).toEqual(before);
     expect(vaultExists()).toBe(false);
     getSpy.mockRestore();
-    expect((await migrateV1(key)).migrated).toBe(4);
+    expect((await migrateV1(key, isLiveKey)).migrated).toBe(4);
   });
 
   it('on an updatedAt tie the existing vault record wins', async () => {
@@ -247,9 +251,9 @@ describe('migrateV1', () => {
       createdAt: T1,
       updatedAt: T1, // same as the v1 copy
     };
-    await writeVault([tie], key);
-    await migrateV1(key);
-    expect(byId((await readVault(key)) ?? []).get('c1')?.title).toBe('Already in v2');
+    await write([tie], key);
+    await migrateV1(key, isLiveKey);
+    expect(byId((await read(key)) ?? []).get('c1')?.title).toBe('Already in v2');
   });
 
   it('a lock during the vault write aborts before any deletion; v1 stays intact', async () => {
@@ -260,15 +264,45 @@ describe('migrateV1', () => {
       useAuthStore.getState().logout();
       return new Uint8Array(n);
     });
-    await expect(migrateV1(key)).rejects.toThrow('Vault is locked');
+    await expect(migrateV1(key, isLiveKey)).rejects.toThrow('Vault is locked');
     expect(secureStoreMock.__store).toEqual(before);
     expect(fsMock.__files.size).toBe(0);
     expect(await hasV1Data()).toBe(true);
   });
 
+  it('a retry over an interrupted cleanup is read-only: no rewrite, just the deletions', async () => {
+    await seedV1(key);
+    await migrateV1(key, isLiveKey);
+    const bytes = fsMock.__files.get('file:///mock/documents/vault.bin');
+    await seedV1(key); // cleanup interrupted: v1 copies are back
+    const spy = jest.spyOn(Crypto, 'getRandomBytesAsync');
+    const result = await migrateV1(key, isLiveKey);
+    expect(result.migrated).toBe(0);
+    expect(result.records).toHaveLength(4);
+    expect(spy).not.toHaveBeenCalled(); // nothing sealed
+    expect(fsMock.__files.get('file:///mock/documents/vault.bin')).toBe(bytes);
+    expect(secureStoreMock.__store.size).toBe(0);
+  });
+
+  it('defaults missing v1 timestamps instead of leaving the entry behind', async () => {
+    const store = secureStoreMock.__store;
+    store.set('c7', await encryptRecord({ id: 'c7', title: 'No dates', username: 'u' }, key));
+    store.set('c8', await encryptRecord({ id: 'c8', title: 'Only updated', updatedAt: T2, createdAt: 5 }, key));
+    store.set('credentialKeys', JSON.stringify(['c7', 'c8']));
+    const result = await migrateV1(key, isLiveKey);
+    expect(result.skipped).toBe(0);
+    const records = byId(result.records);
+    const c7 = records.get('c7');
+    expect(c7?.createdAt).toBe(c7?.updatedAt);
+    expect(Number.isNaN(Date.parse(c7?.createdAt ?? ''))).toBe(false);
+    expect(records.get('c8')?.createdAt).toBe(T2);
+    expect(records.get('c8')?.updatedAt).toBe(T2);
+    expect(await hasV1Data()).toBe(false);
+  });
+
   it('does not resurrect a record deleted in v2 when a retry finds its v1 copy still there', async () => {
     await seedV1(key);
-    const first = await migrateV1(key);
+    const first = await migrateV1(key, isLiveKey);
     expect(first.migratedV1Ids.sort()).toEqual(['c1', 'c2', 'n1', 'p1']);
     // Cleanup was interrupted: the v1 copies are back...
     await seedV1(key);
@@ -276,12 +310,13 @@ describe('migrateV1', () => {
     const stored = await readVaultPayload(key);
     await writeVault(
       { records: (stored?.records ?? []).filter((r) => r.id !== 'c1'), migratedV1Ids: stored?.migratedV1Ids ?? [] },
-      key
+      key,
+      isLiveKey
     );
 
-    const retry = await migrateV1(key);
-    expect(retry.migrated).toBe(3);
-    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c2', 'n1', 'p1']);
+    const retry = await migrateV1(key, isLiveKey);
+    expect(retry.migrated).toBe(0); // the other three are present already
+    expect((await read(key))?.map((r) => r.id).sort()).toEqual(['c2', 'n1', 'p1']);
     expect(secureStoreMock.__store.has('c1')).toBe(false); // the v1 copy went too
     expect(secureStoreMock.__store.size).toBe(0);
     expect((await readVaultPayload(key))?.migratedV1Ids.sort()).toEqual(['c1', 'c2', 'n1', 'p1']);
@@ -296,7 +331,7 @@ describe('migrateV1', () => {
     store.set('p9', await encryptRecord({ id: 'p9', title: 'Typeless', type: 7, identifier: 123456789, createdAt: T1, updatedAt: T1 }, key));
     store.set('personalInfoKeys', JSON.stringify(['p9']));
 
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.skipped).toBe(0);
     const records = byId(result.records);
     expect(records.get('c9')?.fields.map((f) => [f.label, f.value])).toEqual([
@@ -323,8 +358,8 @@ describe('migrateV1', () => {
       updatedAt: T1,
     };
     fsMock.__files.set('file:///mock/documents/vault.bin.bak', await encodeVault({ records: [existing] }, key, { kind: 'vault' }));
-    const result = await migrateV1(key);
+    const result = await migrateV1(key, isLiveKey);
     expect(result.migrated).toBe(4);
-    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'n1', 'p1', 'z9']);
+    expect((await read(key))?.map((r) => r.id).sort()).toEqual(['c1', 'c2', 'n1', 'p1', 'z9']);
   });
 });

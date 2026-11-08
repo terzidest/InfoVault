@@ -4,15 +4,8 @@ import { gcm } from '@noble/ciphers/aes.js';
 import { hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
 import useAuthStore from '../../store/authStore';
 import { generateVaultKey } from '../../utils/crypto';
-import {
-  commitVaultBytes,
-  encodeVault,
-  readVault,
-  readVaultPayload,
-  removeVault,
-  vaultExists,
-  writeVault,
-} from '../vaultFile';
+import { isLiveKey } from '../../store/vaultKey';
+import { commitVaultBytes, encodeVault, readVaultPayload, removeVault, vaultExists, writeVault } from '../vaultFile';
 import {
   VaultFileAuthError,
   VaultFileFormatError,
@@ -66,6 +59,9 @@ const nonceStart = (bytes: Uint8Array): number => HEADER_START + headerLen(bytes
 const ciphertextStart = (bytes: Uint8Array): number => nonceStart(bytes) + 12;
 
 let key: Uint8Array;
+
+const write = (records: readonly VaultRecord[], k: Uint8Array) => writeVault({ records }, k, isLiveKey);
+const read = async (k: Uint8Array) => (await readVaultPayload(k))?.records ?? null;
 
 beforeEach(async () => {
   fsMock.__reset();
@@ -233,58 +229,58 @@ describe('encodeVaultFile / decodeVaultFile', () => {
 describe('readVault / writeVault', () => {
   it('reports no vault, writes one atomically and reads it back', async () => {
     expect(vaultExists()).toBe(false);
-    expect(await readVault(key)).toBeNull();
+    expect(await read(key)).toBeNull();
 
     const records = makeRecords(4);
-    await writeVault(records, key);
+    await write(records, key);
     expect(vaultExists()).toBe(true);
     expect([...fsMock.__files.keys()]).toEqual([VAULT]);
-    expect(await readVault(key)).toEqual(records);
+    expect(await read(key)).toEqual(records);
 
-    await writeVault(makeRecords(1), key);
+    await write(makeRecords(1), key);
     expect([...fsMock.__files.keys()]).toEqual([VAULT]);
-    expect(await readVault(key)).toEqual(makeRecords(1));
+    expect(await read(key)).toEqual(makeRecords(1));
   });
 
   it('fails closed on the wrong key', async () => {
-    await writeVault(makeRecords(1), key);
-    await expect(readVault(await generateVaultKey())).rejects.toThrow(VaultFileAuthError);
+    await write(makeRecords(1), key);
+    await expect(read(await generateVaultKey())).rejects.toThrow(VaultFileAuthError);
   });
 
   it('a failed tmp write leaves the previous vault untouched', async () => {
     const before = makeRecords(2);
-    await writeVault(before, key);
+    await write(before, key);
     const bytesBefore = fsMock.__files.get(VAULT);
 
     fsMock.__failNextWrite('vault.bin.tmp');
-    await expect(writeVault(makeRecords(9), key)).rejects.toThrow('simulated write failure');
+    await expect(write(makeRecords(9), key)).rejects.toThrow('simulated write failure');
     expect(fsMock.__files.get(VAULT)).toBe(bytesBefore);
-    expect(await readVault(key)).toEqual(before);
+    expect(await read(key)).toEqual(before);
   });
 
   it('a failed move of the previous file to .bak leaves it untouched', async () => {
     const before = makeRecords(2);
-    await writeVault(before, key);
+    await write(before, key);
     const bytesBefore = fsMock.__files.get(VAULT);
 
     fsMock.__failNextMove('vault.bin');
-    await expect(writeVault(makeRecords(9), key)).rejects.toThrow('simulated move failure');
+    await expect(write(makeRecords(9), key)).rejects.toThrow('simulated move failure');
     expect(fsMock.__files.get(VAULT)).toBe(bytesBefore);
-    expect(await readVault(key)).toEqual(before);
+    expect(await read(key)).toEqual(before);
   });
 
   it('a failed move of .tmp into place: .bak (last acknowledged) is restored and the .tmp discarded', async () => {
     const before = makeRecords(2);
-    await writeVault(before, key);
+    await write(before, key);
 
     fsMock.__failNextMove('vault.bin.tmp');
-    await expect(writeVault(makeRecords(9), key)).rejects.toThrow('simulated move failure');
+    await expect(write(makeRecords(9), key)).rejects.toThrow('simulated move failure');
     expect(fsMock.__files.has(VAULT)).toBe(false);
     expect(fsMock.__files.has(BAK)).toBe(true);
     expect(fsMock.__files.has(TMP)).toBe(true);
 
     // The caller saw that write fail, so memory == disk means `before`.
-    expect(await readVault(key)).toEqual(before);
+    expect(await read(key)).toEqual(before);
     expect(fsMock.__files.has(VAULT)).toBe(true);
     expect(fsMock.__files.has(BAK)).toBe(false);
     expect(fsMock.__files.has(TMP)).toBe(false);
@@ -292,38 +288,38 @@ describe('readVault / writeVault', () => {
 
   it('a later write on an interrupted-commit state builds on the last acknowledged file', async () => {
     const before = makeRecords(2);
-    await writeVault(before, key);
+    await write(before, key);
     fsMock.__failNextMove('vault.bin.tmp');
-    await expect(writeVault(makeRecords(9), key)).rejects.toThrow();
+    await expect(write(makeRecords(9), key)).rejects.toThrow();
     expect(fsMock.__files.has(VAULT)).toBe(false);
 
     // A tmp write failing in that state still leaves the previous file readable.
     fsMock.__failNextWrite('vault.bin.tmp');
-    await expect(writeVault(makeRecords(5), key)).rejects.toThrow('simulated write failure');
+    await expect(write(makeRecords(5), key)).rejects.toThrow('simulated write failure');
     expect(fsMock.__files.has(VAULT)).toBe(true);
     expect(fsMock.__files.has(BAK)).toBe(false);
     expect(fsMock.__files.has(TMP)).toBe(false);
-    expect(await readVault(key)).toEqual(before);
+    expect(await read(key)).toEqual(before);
 
     // And a successful one replaces it cleanly.
     fsMock.__files.delete(VAULT);
     fsMock.__files.set(BAK, await encodeVault({ records: before }, key, VAULT_HEADER));
     fsMock.__files.set(TMP, new Uint8Array([1, 2, 3]));
-    await writeVault(makeRecords(5), key);
+    await write(makeRecords(5), key);
     expect([...fsMock.__files.keys()]).toEqual([VAULT]);
-    expect(await readVault(key)).toEqual(makeRecords(5));
+    expect(await read(key)).toEqual(makeRecords(5));
   });
 
   it('a partial .tmp next to a .bak: .bak is restored and the partial .tmp dropped', async () => {
     const before = makeRecords(2);
-    await writeVault(before, key);
+    await write(before, key);
     const good = fsMock.__files.get(VAULT) ?? new Uint8Array();
     fsMock.__files.delete(VAULT);
     fsMock.__files.set(BAK, good);
     const newer = await encodeVault({ records: makeRecords(9) }, key, VAULT_HEADER);
     fsMock.__files.set(TMP, newer.subarray(0, newer.length - 20)); // truncated: fails the tag
 
-    expect(await readVault(key)).toEqual(before);
+    expect(await read(key)).toEqual(before);
     expect(fsMock.__files.has(VAULT)).toBe(true);
     expect(fsMock.__files.has(BAK)).toBe(false);
     expect(fsMock.__files.has(TMP)).toBe(false);
@@ -332,15 +328,15 @@ describe('readVault / writeVault', () => {
   it('a .tmp alone is never a vault: it is discarded and the vault reported absent', async () => {
     const bytes = await encodeVault({ records: makeRecords(3) }, key, VAULT_HEADER);
     fsMock.__files.set(TMP, bytes);
-    expect(await readVault(key)).toBeNull();
+    expect(await read(key)).toBeNull();
     expect(fsMock.__files.size).toBe(0);
   });
 
   it('cleans up stale .bak/.tmp leftovers once the primary reads fine', async () => {
-    await writeVault(makeRecords(1), key);
+    await write(makeRecords(1), key);
     fsMock.__files.set(BAK, new Uint8Array([1, 2, 3]));
     fsMock.__files.set(TMP, new Uint8Array([4]));
-    expect(await readVault(key)).toEqual(makeRecords(1));
+    expect(await read(key)).toEqual(makeRecords(1));
     expect([...fsMock.__files.keys()]).toEqual([VAULT]);
   });
 
@@ -364,62 +360,100 @@ describe('readVault / writeVault', () => {
       wrappedKey: 'v1:00:00',
     };
     fsMock.__files.set(VAULT, await encodeVault({ records: makeRecords(1) }, key, header));
-    await expect(readVault(key)).rejects.toThrow(VaultFileFormatError);
+    await expect(read(key)).rejects.toThrow(VaultFileFormatError);
   });
 
   it('writeVault refuses a key the vault no longer holds and touches nothing on disk', async () => {
-    await writeVault(makeRecords(1), key);
+    await write(makeRecords(1), key);
     const before = fsMock.__files.get(VAULT);
     // Lock during the nonce draw: the key bytes are zeroed in place.
     jest.spyOn(Crypto, 'getRandomBytesAsync').mockImplementationOnce(async (n: number) => {
       useAuthStore.getState().logout();
       return new Uint8Array(n);
     });
-    await expect(writeVault(makeRecords(5), key)).rejects.toThrow('Vault is locked');
+    await expect(write(makeRecords(5), key)).rejects.toThrow('Vault is locked');
     expect(fsMock.__files.get(VAULT)).toBe(before);
     expect([...fsMock.__files.keys()]).toEqual([VAULT]);
     // And a key that was simply never the live one.
     useAuthStore.setState({ encryptionKey: await generateVaultKey(), isAuthenticated: true });
-    await expect(writeVault(makeRecords(5), key)).rejects.toThrow('Vault is locked');
+    await expect(write(makeRecords(5), key)).rejects.toThrow('Vault is locked');
     expect(fsMock.__files.get(VAULT)).toBe(before);
   });
 
   it('falls back to .bak when the primary is undecodable, repairing the primary', async () => {
     const good = makeRecords(2);
-    await writeVault(good, key);
+    await write(good, key);
     const goodBytes = fsMock.__files.get(VAULT) ?? new Uint8Array();
 
     fsMock.__files.set(BAK, goodBytes);
     fsMock.__files.set(VAULT, new Uint8Array(0)); // zero-length primary
-    expect(await readVault(key)).toEqual(good);
+    expect(await read(key)).toEqual(good);
     expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(goodBytes));
     expect(fsMock.__files.has(BAK)).toBe(false);
 
     fsMock.__files.set(BAK, goodBytes);
     fsMock.__files.set(VAULT, goodBytes.subarray(0, goodBytes.length - 9)); // truncated: tag fails
-    expect(await readVault(key)).toEqual(good);
+    expect(await read(key)).toEqual(good);
     expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(goodBytes));
     expect(fsMock.__files.has(BAK)).toBe(false);
   });
 
+  it('repairs the primary without an overwrite-move, so a failure mid-repair still leaves a decodable copy', async () => {
+    const good = makeRecords(2);
+    await write(good, key);
+    const goodBytes = fsMock.__files.get(VAULT) ?? new Uint8Array();
+    const CORRUPT = `${DOC}/vault.bin.corrupt`;
+
+    // Failure on the first move (primary → .corrupt): nothing moved.
+    fsMock.__files.set(BAK, goodBytes);
+    fsMock.__files.set(VAULT, new Uint8Array(0));
+    fsMock.__failNextMove('vault.bin');
+    await expect(read(key)).rejects.toThrow('simulated move failure');
+    expect(fsMock.__files.get(VAULT)?.length).toBe(0);
+    expect(fsMock.__files.has(BAK)).toBe(true);
+
+    // Failure on the second move (.bak → vault.bin): .bak still intact, .corrupt holds the junk.
+    fsMock.__failNextMove('vault.bin.bak');
+    await expect(read(key)).rejects.toThrow('simulated move failure');
+    expect(fsMock.__files.has(VAULT)).toBe(false);
+    expect(fsMock.__files.has(CORRUPT)).toBe(true);
+    expect(Array.from(fsMock.__files.get(BAK) ?? [])).toEqual(Array.from(goodBytes));
+
+    // The next read recovers from .bak and drops the junk.
+    expect(await read(key)).toEqual(good);
+    expect([...fsMock.__files.keys()]).toEqual([VAULT]);
+    expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(goodBytes));
+  });
+
+  it('an I/O failure reading the primary propagates and leaves .bak alone', async () => {
+    const good = makeRecords(2);
+    await write(good, key);
+    const goodBytes = fsMock.__files.get(VAULT) ?? new Uint8Array();
+    fsMock.__files.set(BAK, goodBytes);
+    jest.spyOn(FileSystem.File.prototype, 'bytes').mockRejectedValueOnce(new Error('EIO'));
+    await expect(read(key)).rejects.toThrow('EIO');
+    expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(goodBytes));
+    expect(Array.from(fsMock.__files.get(BAK) ?? [])).toEqual(Array.from(goodBytes));
+  });
+
   it('a bad primary with no usable .bak surfaces the primary error', async () => {
     fsMock.__files.set(VAULT, new Uint8Array(0));
-    await expect(readVault(key)).rejects.toThrow(VaultFileFormatError);
+    await expect(read(key)).rejects.toThrow(VaultFileFormatError);
     const bytes = await encodeVault({ records: makeRecords(1) }, key, VAULT_HEADER);
     const flipped = new Uint8Array(bytes);
     flipped[flipped.length - 1] = (flipped[flipped.length - 1] ?? 0) ^ 1;
     fsMock.__files.set(VAULT, flipped);
-    await expect(readVault(key)).rejects.toThrow(VaultFileAuthError);
+    await expect(read(key)).rejects.toThrow(VaultFileAuthError);
     // A .bak that also fails does not mask the primary's error either.
     fsMock.__files.set(BAK, new Uint8Array([1, 2, 3]));
-    await expect(readVault(key)).rejects.toThrow(VaultFileAuthError);
+    await expect(read(key)).rejects.toThrow(VaultFileAuthError);
     expect(fsMock.__files.has(VAULT)).toBe(true);
     expect((await readVaultPayload(await generateVaultKey()).catch((e: unknown) => e)) instanceof VaultFileAuthError).toBe(true);
   });
 
   it('uses expo-crypto for the nonce', async () => {
     const spy = jest.spyOn(Crypto, 'getRandomBytesAsync');
-    await writeVault([], key);
+    await write([], key);
     expect(spy).toHaveBeenCalledWith(12);
   });
 });

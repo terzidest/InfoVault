@@ -10,3 +10,6 @@ export const requireKey = (): Uint8Array => {
   if (!key) throw new Error('Vault is locked');
   return key;
 };
+
+/** True while `key` is the very reference authStore holds (not zeroed, not replaced). */
+export const isLiveKey = (key: Uint8Array): boolean => useAuthStore.getState().encryptionKey === key;
