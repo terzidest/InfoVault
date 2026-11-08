@@ -7,15 +7,6 @@ export type RootStackParamList = {
   Home: undefined;
   Record: { id: string };
   AddEditRecord: { id?: string; template?: TemplateId } | undefined;
-  CredentialsList: undefined;
-  AddCredential: { id?: string } | undefined;
-  ViewCredential: { id: string };
-  PersonalInfoList: undefined;
-  AddPersonalInfo: { id?: string } | undefined;
-  ViewPersonalInfo: { id: string };
-  NotesList: undefined;
-  AddNote: { id?: string } | undefined;
-  ViewNote: { id: string };
   Settings: undefined;
 };
 

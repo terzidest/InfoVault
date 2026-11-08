@@ -1,5 +1,6 @@
-// Settings: Security / Appearance / About groups on surface cards, plus a
-// "Lock now" action. Built on the v2 theme primitives; reads tokens only.
+// Settings: its own top row (back + title), then Security / Appearance /
+// About groups on surface cards and a "Lock now" action. Built on the v2
+// theme primitives; reads tokens only.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,7 +14,9 @@ import { checkAuthenticationTypes } from '../../services/authentication';
 import { useTheme } from '../../theme/useTheme';
 import {
   Screen,
+  BarTitle,
   Eyebrow,
+  IconButton,
   RowTitle,
   Secondary,
   Kind,
@@ -94,13 +97,11 @@ const Group: React.FC<GroupProps> = ({ title, children }) => {
   );
 };
 
-const Settings: React.FC<ScreenProps<'Settings'>> = () => {
+const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
   const { tokens } = useTheme();
 
   // Field-level selectors: skip the isLoading/error interim re-renders.
   const autoLockTimeout = useSettingsStore((s) => s.settings.autoLockTimeout);
-  // v1 list items still read maskSensitiveData; the setting goes away at the v2 cutover.
-  const maskSensitiveData = useSettingsStore((s) => s.settings.maskSensitiveData);
   const theme = useSettingsStore((s) => s.settings.theme);
   const initSettings = useSettingsStore((s) => s.initSettings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
@@ -156,11 +157,6 @@ const Settings: React.FC<ScreenProps<'Settings'>> = () => {
     }
   };
 
-  const handleMaskToggle = (next: boolean) => {
-    updateLastActive();
-    updateSettings({ maskSensitiveData: next });
-  };
-
   const handleThemeChange = (next: ThemeMode) => {
     updateLastActive();
     if (next !== theme) {
@@ -184,7 +180,12 @@ const Settings: React.FC<ScreenProps<'Settings'>> = () => {
   const version = Constants.expoConfig?.version ?? '—';
 
   return (
-    <Screen edges={['bottom']}>
+    <Screen>
+      <View style={[styles.topRow, { paddingHorizontal: tokens.spacing.lg }]}>
+        <IconButton icon="chevron-back" accessibilityLabel="Back" onPress={() => navigation.goBack()} />
+        <BarTitle style={styles.topTitle}>Settings</BarTitle>
+        <View style={styles.topSpacer} />
+      </View>
       <ScrollView
         contentContainerStyle={{ padding: tokens.spacing.lg, paddingBottom: tokens.spacing.xxxl }}
         keyboardShouldPersistTaps="handled"
@@ -223,19 +224,6 @@ const Settings: React.FC<ScreenProps<'Settings'>> = () => {
                   style={{ marginLeft: tokens.spacing.xs }}
                 />
               </View>
-            }
-          />
-          <ListRow
-            divider
-            title="Mask sensitive values"
-            icon="eye-off-outline"
-            tint={tokens.colors.tints.note}
-            trailing={
-              <Switch
-                value={maskSensitiveData}
-                onValueChange={handleMaskToggle}
-                accessibilityLabel="Mask sensitive values"
-              />
             }
           />
           <ListRow
@@ -320,6 +308,14 @@ const Settings: React.FC<ScreenProps<'Settings'>> = () => {
 };
 
 const styles = StyleSheet.create({
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 64,
+  },
+  topTitle: { flex: 1, textAlign: 'center' },
+  // Mirrors the back button so the title stays centred.
+  topSpacer: { width: 44 },
   card: {
     borderWidth: 1,
     overflow: 'hidden',

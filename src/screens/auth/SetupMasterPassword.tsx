@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { scale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 
 import useAuthStore from '../../store/authStore';
@@ -86,7 +85,7 @@ const SetupMasterPassword: React.FC<ScreenProps<'SetupMasterPassword'>> = ({ nav
       </Text>
 
       <View style={styles.warning}>
-        <Ionicons name="warning-outline" size={scale(18)} color="#B26A00" style={styles.warningIcon} />
+        <Ionicons name="warning-outline" size={18} color="#B26A00" style={styles.warningIcon} />
         <Text style={styles.warningText}>
           There is no recovery. If you forget this password, your data is permanently lost.
         </Text>
@@ -144,63 +143,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   content: {
-    padding: scale(20),
-    paddingTop: scale(48),
+    padding: 20,
+    paddingTop: 48,
   },
   title: {
-    fontSize: scale(22),
+    fontSize: 22,
     fontWeight: '700',
     color: '#006E90',
-    marginBottom: scale(8),
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: scale(14),
+    fontSize: 14,
     color: '#666666',
-    marginBottom: scale(16),
-    lineHeight: scale(20),
+    marginBottom: 16,
+    lineHeight: 20,
   },
   warning: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: '#FFF6E5',
-    borderRadius: scale(8),
-    padding: scale(12),
-    marginBottom: scale(20),
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
   },
   warningIcon: {
-    marginRight: scale(8),
-    marginTop: scale(1),
+    marginRight: 8,
+    marginTop: 1,
   },
   warningText: {
     flex: 1,
-    fontSize: scale(13),
+    fontSize: 13,
     color: '#8A5A00',
-    lineHeight: scale(18),
+    lineHeight: 18,
   },
   strengthRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: scale(-8),
-    marginBottom: scale(16),
-    marginLeft: scale(2),
+    marginTop: -8,
+    marginBottom: 16,
+    marginLeft: 2,
   },
   strengthLabel: {
-    fontSize: scale(12),
+    fontSize: 12,
     color: '#666666',
-    marginRight: scale(8),
+    marginRight: 8,
   },
   strengthBarBg: {
     flex: 1,
-    height: scale(4),
+    height: 4,
     backgroundColor: '#EEEEEE',
-    borderRadius: scale(2),
+    borderRadius: 2,
     overflow: 'hidden',
   },
   strengthBar: {
     height: '100%',
   },
   button: {
-    marginTop: scale(8),
+    marginTop: 8,
   },
 });
 

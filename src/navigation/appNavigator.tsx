@@ -7,18 +7,8 @@ import RecordScreen from "../screens/RecordScreen";
 import AddEditRecordScreen from "../screens/AddEditRecordScreen";
 import Authentication from "../screens/auth/Authentication";
 import SetupMasterPassword from "../screens/auth/SetupMasterPassword";
-import CredentialsList from "../screens/credentials/CredentialsList";
-import AddCredential from "../screens/credentials/AddCredential";
-import ViewCredential from "../screens/credentials/ViewCredential";
-import PersonalInfoList from "../screens/personalInfo/PersonalInfoList";
-import AddPersonalInfo from "../screens/personalInfo/AddPersonalInfo";
-import ViewPersonalInfo from "../screens/personalInfo/ViewPersonalInfo";
-import NotesList from "../screens/notes/NotesList";
-import AddNote from "../screens/notes/AddNote";
-import ViewNote from "../screens/notes/ViewNote";
 import Settings from "../screens/settings/Settings";
 
-import Header from "../components/layouts/Header";
 import useAuthStore from "../store/authStore";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -30,6 +20,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 // screen and leak stacked Authentication routes on every lock cycle.
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
+// Every screen draws its own top row on the themed Screen root, so the
+// native stack header is never shown.
 const AppNavigator: React.FC = () => {
   const needsSetup = useAuthStore((state) => state.needsSetup);
 
@@ -37,103 +29,20 @@ const AppNavigator: React.FC = () => {
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName={needsSetup ? "SetupMasterPassword" : "Authentication"}
-        screenOptions={({ route }) => ({
-          header: ({ navigation, options }) => {
-            const isHome = route.name === "Home";
-
-            return (
-              <Header
-                title={options.title || route.name}
-                showBackButton={!isHome}
-                showLogo={isHome}
-                showSettings={isHome}
-                onBackPress={() => navigation.goBack()}
-              />
-            );
-          },
-          contentStyle: { backgroundColor: "#FFFFFF" },
+        screenOptions={{
+          headerShown: false,
+          // Transparent so the Screen root's own background shows during
+          // transitions in both themes.
+          contentStyle: { backgroundColor: "transparent" },
           animation: "slide_from_right",
-        })}
+        }}
       >
-        <Stack.Screen
-          name="SetupMasterPassword"
-          component={SetupMasterPassword}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Authentication"
-          component={Authentication}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Home"
-          component={Home}
-          options={{
-            // Home draws its own brand row.
-            headerShown: false,
-            gestureEnabled: false,
-          }}
-        />
-        <Stack.Screen
-          name="Record"
-          component={RecordScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="AddEditRecord"
-          component={AddEditRecordScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="CredentialsList"
-          component={CredentialsList}
-          options={{ title: "Credentials" }}
-        />
-        <Stack.Screen
-          name="AddCredential"
-          component={AddCredential}
-          options={{ title: "Add Credential" }}
-        />
-        <Stack.Screen
-          name="ViewCredential"
-          component={ViewCredential}
-          options={{ title: "Credential Details" }}
-        />
-        <Stack.Screen
-          name="PersonalInfoList"
-          component={PersonalInfoList}
-          options={{ title: "Personal Information" }}
-        />
-        <Stack.Screen
-          name="AddPersonalInfo"
-          component={AddPersonalInfo}
-          options={{ title: "Add Personal Info" }}
-        />
-        <Stack.Screen
-          name="ViewPersonalInfo"
-          component={ViewPersonalInfo}
-          options={{ title: "Info Details" }}
-        />
-        <Stack.Screen
-          name="NotesList"
-          component={NotesList}
-          options={{ title: "Notes" }}
-        />
-        <Stack.Screen
-          name="AddNote"
-          component={AddNote}
-          options={{ title: "Add Note" }}
-        />
-        <Stack.Screen
-          name="ViewNote"
-          component={ViewNote}
-          options={{ title: "Note Details" }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={Settings}
-          options={{ title: "Settings" }}
-        />
+        <Stack.Screen name="SetupMasterPassword" component={SetupMasterPassword} />
+        <Stack.Screen name="Authentication" component={Authentication} />
+        <Stack.Screen name="Home" component={Home} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="Record" component={RecordScreen} />
+        <Stack.Screen name="AddEditRecord" component={AddEditRecordScreen} />
+        <Stack.Screen name="Settings" component={Settings} />
       </Stack.Navigator>
     </NavigationContainer>
   );

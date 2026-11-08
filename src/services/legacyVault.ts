@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
-import type { StorageType } from '../types/storage';
+
+export type StorageType = 'credential' | 'note' | 'personalInfo';
 
 // The v1 (pre-2.0) record layout in SecureStore: one sealed entry per record
 // at its own id, plus a JSON id registry per type (`credentialKeys`, ...).

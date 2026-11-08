@@ -3,13 +3,13 @@ import { decryptRecord, generateSecureId, isRecord } from '../utils/crypto';
 import { fromV1Credential, fromV1Note, fromV1PersonalInfo, timestamp } from '../utils/records';
 import { isStringArray, isVaultRecord } from '../utils/vaultFormat';
 import { STORAGE_TYPES, registryKey } from './legacyVault';
+import type { StorageType } from './legacyVault';
 import { readVaultPayload, writeVault } from './vaultFile';
 import type { IsKeyLive } from './vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../types/models';
-import type { StorageType } from '../types/storage';
 
 // v1 → v2 storage migration: the per-record SecureStore entries (sealed under
-// the vault key by v1's secureStorage) become records in vault.bin. Takes the
+// the vault key by v1's per-record storage) become records in vault.bin. Takes the
 // key explicitly rather than going through authStore: after a v1.0.0 → v2
 // update a biometric-first unlock has the key but no header yet, and the key
 // is all this needs — but it must be the live authStore key, because the

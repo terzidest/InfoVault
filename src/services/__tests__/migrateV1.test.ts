@@ -31,7 +31,7 @@ const CREDS: Credential[] = [
 const PI: PersonalInfo = { id: 'p1', title: 'ΑΦΜ', type: 'Tax Number', identifier: '123456789', createdAt: T1, updatedAt: T1 };
 const NOTE: Note = { id: 'n1', title: 'Standup', content: 'Every day 10:00', category: 'Work', createdAt: T1, updatedAt: T1 };
 
-// Seeds SecureStore exactly as v1's secureStorage wrote it: each record sealed
+// Seeds SecureStore exactly as v1 wrote it: each record sealed
 // under the vault key at its own id, plus a JSON id registry per type.
 const seedV1 = async (k: Uint8Array) => {
   const store = secureStoreMock.__store;

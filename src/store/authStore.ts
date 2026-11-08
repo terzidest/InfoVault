@@ -20,9 +20,6 @@ import { hasV1Data } from '../services/migrateV1';
 import { removeVault, vaultExists, writeVault } from '../services/vaultFile';
 import { checkAuthenticationTypes } from '../services/authentication';
 import { clearSensitiveClipboard } from '../services/clipboard';
-import useCredentialsStore from './credentialsStore';
-import useNotesStore from './notesStore';
-import usePersonalInfoStore from './personalInfoStore';
 import useRecordsStore from './recordsStore';
 import { isLiveKey } from './vaultKey';
 
@@ -414,13 +411,10 @@ const useAuthStore = create<AuthState>((set, get) => {
 
     logout: () => {
       // Locking must drop every trace of the unlocked session: zero the key
-      // bytes and evict all decrypted records from the domain stores.
+      // bytes and evict the decrypted records from recordsStore.
       get().encryptionKey?.fill(0);
       set({ isAuthenticated: false, encryptionKey: null, isOpeningVault: false, isMigrating: false });
       useRecordsStore.getState().clear();
-      useCredentialsStore.getState().clearCredentials();
-      useNotesStore.getState().clearNotes();
-      usePersonalInfoStore.getState().clearPersonalInfo();
       clearSensitiveClipboard();
     },
 
