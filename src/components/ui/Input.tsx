@@ -4,12 +4,14 @@ import {
   TextInput,
   Text,
   TouchableOpacity,
+  StyleSheet,
   StyleProp,
   TextStyle,
   ViewStyle,
   TextInputProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../theme/colors';
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -45,29 +47,29 @@ const Input: React.FC<InputProps> = ({
   const [secureTextEntry, setSecureTextEntry] = useState(secure);
 
   return (
-    <View className="mb-4" style={style}>
+    <View style={[styles.container, style]}>
       {label && (
-        <View className="flex-row items-center mb-1.5">
-          <Text className={`text-sm font-medium ${error ? 'text-danger' : 'text-dark'} mr-2`}>
+        <View style={styles.labelRow}>
+          <Text style={[styles.label, error ? styles.labelError : styles.labelDefault]}>
             {label}
           </Text>
 
           {sensitive && (
-            <View className="bg-secondary px-1.5 py-0.5 rounded">
-              <Text className="text-xs font-semibold text-dark">Sensitive</Text>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>Sensitive</Text>
             </View>
           )}
         </View>
       )}
 
-      <View className="relative">
+      <View style={styles.fieldWrapper}>
         <TextInput
-          className={`
-            bg-gray-100 border rounded-lg px-3 py-2.5 text-sm text-dark
-            ${error ? 'border-danger' : 'border-gray-200'}
-            ${multiline ? 'min-h-[100px] py-2.5 text-left' : ''}
-          `}
-          style={inputStyle}
+          style={[
+            styles.input,
+            error ? styles.inputError : styles.inputDefault,
+            multiline && styles.inputMultiline,
+            inputStyle,
+          ]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -80,7 +82,7 @@ const Input: React.FC<InputProps> = ({
 
         {secure && (
           <TouchableOpacity
-            className="absolute right-3 top-1/2 -mt-2.5"
+            style={styles.toggle}
             onPress={() => setSecureTextEntry(!secureTextEntry)}
             accessibilityRole="button"
             accessibilityLabel={secureTextEntry ? 'Show value' : 'Hide value'}
@@ -95,12 +97,89 @@ const Input: React.FC<InputProps> = ({
       </View>
 
       {helperText && (
-        <Text className={`text-xs mt-1 ml-0.5 ${error ? 'text-danger' : 'text-gray-500'}`}>
+        <Text style={[styles.helper, error ? styles.helperError : styles.helperDefault]}>
           {helperText}
         </Text>
       )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  label: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    marginRight: 8,
+  },
+  labelDefault: {
+    color: colors.dark,
+  },
+  labelError: {
+    color: colors.danger,
+  },
+  badge: {
+    backgroundColor: colors.secondary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  fieldWrapper: {
+    position: 'relative',
+  },
+  input: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.dark,
+  },
+  inputDefault: {
+    borderColor: '#E5E7EB',
+  },
+  inputError: {
+    borderColor: colors.danger,
+  },
+  inputMultiline: {
+    minHeight: 100,
+    paddingVertical: 10,
+    textAlign: 'left',
+  },
+  toggle: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    marginTop: -10,
+  },
+  helper: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+    marginLeft: 2,
+  },
+  helperDefault: {
+    color: '#6B7280',
+  },
+  helperError: {
+    color: colors.danger,
+  },
+});
 
 export default Input;

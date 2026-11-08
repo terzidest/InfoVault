@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 
@@ -37,42 +37,39 @@ function Select<T extends string | number>({
   const selectableOptions = options.filter((o) => o.value !== '');
 
   return (
-    <View className="mb-4">
+    <View style={styles.container}>
       {label && (
-        <Text className={`text-sm font-medium ${error ? 'text-danger' : 'text-dark'} mb-1.5`}>
+        <Text style={[styles.label, error ? styles.labelError : styles.labelDefault]}>
           {label}
         </Text>
       )}
 
       <Pressable
         onPress={() => setOpen(true)}
-        className={`
-          flex-row items-center justify-between bg-gray-100 border rounded-lg px-3 py-2.5
-          ${error ? 'border-danger' : 'border-gray-200'}
-        `}
+        style={[styles.field, error ? styles.fieldError : styles.fieldDefault]}
       >
-        <Text className={`text-sm ${isPlaceholder ? 'text-gray-400' : 'text-dark'}`}>
+        <Text style={[styles.value, isPlaceholder ? styles.valuePlaceholder : styles.valueSelected]}>
           {displayLabel}
         </Text>
         <Ionicons name="chevron-down" size={18} color="#777777" />
       </Pressable>
 
       {helperText && (
-        <Text className={`text-xs mt-1 ml-0.5 ${error ? 'text-danger' : 'text-gray-500'}`}>
+        <Text style={[styles.helper, error ? styles.helperError : styles.helperDefault]}>
           {helperText}
         </Text>
       )}
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 bg-black/40 justify-end" onPress={() => setOpen(false)}>
-          <Pressable className="bg-white rounded-t-2xl pt-2 pb-6" onPress={(e) => e.stopPropagation()}>
-            <View className="items-center py-2">
-              <View className="w-10 h-1 rounded-full bg-gray-300" />
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.handleWrapper}>
+              <View style={styles.handle} />
             </View>
             {label && (
-              <Text className="text-base font-semibold text-dark px-4 py-2">{label}</Text>
+              <Text style={styles.sheetTitle}>{label}</Text>
             )}
-            <ScrollView className="max-h-80">
+            <ScrollView style={styles.list}>
               {selectableOptions.map((option) => {
                 const isSelected = option.value === value;
                 return (
@@ -82,9 +79,9 @@ function Select<T extends string | number>({
                       onValueChange(option.value);
                       setOpen(false);
                     }}
-                    className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100"
+                    style={styles.option}
                   >
-                    <Text className={`text-base ${isSelected ? 'text-primary font-semibold' : 'text-dark'}`}>
+                    <Text style={[styles.optionText, isSelected ? styles.optionTextSelected : styles.optionTextDefault]}>
                       {option.label}
                     </Text>
                     {isSelected && <Ionicons name="checkmark" size={20} color={colors.primary} />}
@@ -98,5 +95,114 @@ function Select<T extends string | number>({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  labelDefault: {
+    color: colors.dark,
+  },
+  labelError: {
+    color: colors.danger,
+  },
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  fieldDefault: {
+    borderColor: '#E5E7EB',
+  },
+  fieldError: {
+    borderColor: colors.danger,
+  },
+  value: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  valuePlaceholder: {
+    color: '#9CA3AF',
+  },
+  valueSelected: {
+    color: colors.dark,
+  },
+  helper: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+    marginLeft: 2,
+  },
+  helperDefault: {
+    color: '#6B7280',
+  },
+  helperError: {
+    color: colors.danger,
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  handleWrapper: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 9999,
+    backgroundColor: '#D1D5DB',
+  },
+  sheetTitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: colors.dark,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  list: {
+    maxHeight: 320,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  optionText: {
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  optionTextDefault: {
+    color: colors.dark,
+  },
+  optionTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+});
 
 export default Select;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -34,14 +34,14 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View className="w-full bg-primary" style={{ paddingTop: insets.top }}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* One height for every screen; 64px fits the logo at near-full presence. */}
-      <View className="flex-row items-center justify-between px-4 h-16">
-        <View className="w-10 items-center">
+      <View style={styles.bar}>
+        <View style={styles.side}>
           {showBackButton && (
             <TouchableOpacity
               onPress={handleBackPress}
-              className="w-10 h-10 rounded-full items-center justify-center"
+              style={styles.iconButton}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel="Go back"
@@ -51,25 +51,25 @@ const Header: React.FC<HeaderProps> = ({
           )}
         </View>
 
-        <View className="flex-1 items-center justify-center">
+        <View style={styles.center}>
           {showLogo ? (
             <Image
               source={require('../../assets/images/logo.png')}
-              className="w-40 h-14"
+              style={styles.logo}
               resizeMode="contain"
             />
           ) : (
-            <Text className="text-lg font-semibold text-secondary" numberOfLines={1}>
+            <Text style={styles.title} numberOfLines={1}>
               {title || 'InfoVault'}
             </Text>
           )}
         </View>
 
-        <View className="w-10 items-center">
+        <View style={styles.side}>
           {showSettings && (
             <TouchableOpacity
               onPress={() => navigation.navigate('Settings')}
-              className="w-10 h-10 rounded-full items-center justify-center"
+              style={styles.iconButton}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel="Open settings"
@@ -79,9 +79,54 @@ const Header: React.FC<HeaderProps> = ({
           )}
         </View>
       </View>
-      <View className="h-1 w-full bg-secondary" />
+      <View style={styles.accent} />
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+    backgroundColor: colors.primary,
+  },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    height: 64,
+  },
+  side: {
+    width: 40,
+    alignItems: 'center',
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 160,
+    height: 56,
+  },
+  title: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: colors.secondary,
+  },
+  accent: {
+    height: 4,
+    width: '100%',
+    backgroundColor: colors.secondary,
+  },
+});
 
 export default Header;

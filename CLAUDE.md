@@ -16,7 +16,7 @@ npm run typecheck  # tsc --noEmit  — RUN THIS before considering any change do
 Tests are Jest (`npm test`, config in `jest.config.js`), logic-level only: real Zustand stores and real `@noble` crypto run against in-memory stand-ins for the native modules in `__mocks__/` (SecureStore, expo-crypto, local-authentication, clipboard). No component-render tests — pull logic out of components to test it. Suites live in `src/**/__tests__/*.test.ts`; use the mocks' `__reset`/`__setAuthGate`/`__failNextSet` helpers through the same `import * as` the code uses. Anything touching crypto, storage or the auth flow needs a test. UI changes are still verified by running the app. Always run `npm run typecheck` after editing — this is a strict-TS codebase and type errors are the primary regression signal. Lint with `npm run lint`; CI enforces zero warnings and runs the tests.
 
 > **Lockfile gotcha:** after adding/removing any dependency, regenerate the lockfile from scratch (`rm -rf node_modules package-lock.json && npm install`). Incremental installs on macOS prune Linux-only optional entries (`@emnapi/*` under the unrs-resolver bindings) and `npm ci` then fails in CI.
-> After regenerating, run `npx expo install --check` — a fresh resolve floats caret ranges past what SDK 52 supports (this broke Metro once via nativewind 4.2/css-interop). nativewind is pinned exact for this reason; don't re-add a caret. Verify bundling with `npx expo export --platform ios` before pushing dependency changes.
+> After regenerating, run `npx expo install --check` — a fresh resolve floats caret ranges past what SDK 52 supports. Verify bundling with `npx expo export --platform ios` before pushing dependency changes.
 
 ## Security invariants (NEVER violate these)
 
@@ -59,7 +59,7 @@ Typed stack via `RootStackParamList` in `types/navigation.ts`. Any new screen or
 
 - **TypeScript, strict.** No `any`. Prefer `unknown` + narrowing. Existing code uses discriminated unions and mapped types (e.g. `ToggleableSettingKey`) — match that level.
 - **Functional components + hooks** only. `React.FC<Props>` with an explicit `Props` interface.
-- **Styling:** NativeWind (`className`) is the default for components and simple screens. Several screens use `StyleSheet.create` with `react-native-size-matters` `scale()` for dimensions — when editing one of those, stay consistent with the file you're in; don't mix paradigms within a file.
+- **Styling:** `StyleSheet.create` everywhere for components and simple screens; several screens still use `react-native-size-matters` `scale()` for dimensions — when editing one of those, stay consistent with the file you're in.
 - **Imports:** type-only imports use `import type`. Relative paths (no path aliases configured).
 - **Colors** are currently hardcoded hex (`#006E90` primary, `#FFC107` secondary, `#4CAF50` success, `#F44336` danger, `#333333` dark). If touching theming, centralize rather than adding more scattered hex.
 - Error handling in stores follows a fixed pattern: `set loading → try → set result → catch → set error + rethrow`. Match it.

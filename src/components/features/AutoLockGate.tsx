@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import * as ScreenCapture from 'expo-screen-capture';
 import { Ionicons } from '@expo/vector-icons';
 import useAuthStore from '../../store/authStore';
 import useSettingsStore from '../../store/settingsStore';
 import { navigationRef } from '../../navigation/appNavigator';
+import { colors } from '../../theme/colors';
 
 // How often the idle timeout is evaluated while the app is foregrounded.
 const CHECK_INTERVAL_MS = 5_000;
@@ -93,16 +94,39 @@ const AutoLockGate: React.FC<Props> = ({ children }) => {
   }, []);
 
   return (
-    <View className="flex-1" onStartShouldSetResponderCapture={handleTouchCapture}>
+    <View style={styles.root} onStartShouldSetResponderCapture={handleTouchCapture}>
       {children}
       {isObscured && (
-        <View className="absolute inset-0 items-center justify-center bg-primary">
+        <View style={styles.obscurer}>
           <Ionicons name="lock-closed" size={48} color="#FFFFFF" />
-          <Text className="text-lg font-semibold text-white mt-4">InfoVault</Text>
+          <Text style={styles.obscurerText}>InfoVault</Text>
         </View>
       )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  obscurer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  obscurerText: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 16,
+  },
+});
 
 export default AutoLockGate;

@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, Text, ActivityIndicator, StatusBar } from 'react-native';
+import { View, Text, ActivityIndicator, StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import './global.css';
 
 import AppNavigator from './src/navigation/appNavigator';
 import AutoLockGate from './src/components/features/AutoLockGate';
 import useAuthStore from './src/store/authStore';
+import { colors } from './src/theme/colors';
 
 const App: React.FC = () => {
   // Selectors: a whole-store subscription here re-renders the entire app
@@ -21,14 +21,14 @@ const App: React.FC = () => {
 
   if (!isInitialized) {
     return (
-      <View className="flex-1 items-center justify-center bg-light">
+      <View style={styles.loading}>
         <StatusBar
           backgroundColor="#006E90"
           barStyle="light-content"
           translucent={true}
         />
         <ActivityIndicator size="large" color="#006E90" />
-        <Text className="text-lg font-medium text-primary mt-4">Loading InfoVault...</Text>
+        <Text style={styles.loadingText}>Loading InfoVault...</Text>
       </View>
     );
   }
@@ -46,5 +46,21 @@ const App: React.FC = () => {
     </SafeAreaProvider>
   );
 };
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.light,
+  },
+  loadingText: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '500',
+    color: colors.primary,
+    marginTop: 16,
+  },
+});
 
 export default App;

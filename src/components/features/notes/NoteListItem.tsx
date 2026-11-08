@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatRelativeTime, truncateText } from '../../../utils/formatters';
-import { noteCategoryColor } from '../../../theme/colors';
+import { colors, noteCategoryColor } from '../../../theme/colors';
 import type { Note } from '../../../types/models';
 
 interface NoteListItemProps {
@@ -15,39 +15,33 @@ const NoteListItem: React.FC<NoteListItemProps> = ({ note, onPress }) => {
 
   return (
     <TouchableOpacity
-      className="flex-row bg-white rounded-lg mb-3 p-3 border border-gray-100 shadow-sm"
+      style={styles.row}
       activeOpacity={0.7}
       onPress={onPress}
     >
-      <View
-        className="w-10 h-10 rounded-lg justify-center items-center mr-3"
-        style={{ backgroundColor: categoryColor }}
-      >
+      <View style={[styles.icon, { backgroundColor: categoryColor }]}>
         <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
       </View>
 
-      <View className="flex-1">
-        <Text className="text-base font-medium text-dark mb-1" numberOfLines={1}>
+      <View style={styles.body}>
+        <Text style={styles.title} numberOfLines={1}>
           {note.title || 'Untitled Note'}
         </Text>
 
-        <Text className="text-sm text-gray-600 mb-2 leading-5" numberOfLines={2}>
+        <Text style={styles.preview} numberOfLines={2}>
           {truncateText(note.content || '', 80)}
         </Text>
 
-        <View className="flex-row items-center justify-between">
+        <View style={styles.footer}>
           {note.category && (
-            <View
-              className="px-2 py-0.5 rounded"
-              style={{ backgroundColor: categoryColor + '20' }}
-            >
+            <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '20' }]}>
               <Text style={{ color: categoryColor, fontSize: 10, fontWeight: '600' }}>
                 {note.category}
               </Text>
             </View>
           )}
 
-          <Text className="text-xs text-gray-400">
+          <Text style={styles.timestamp}>
             {formatRelativeTime(note.updatedAt)}
           </Text>
         </View>
@@ -55,6 +49,62 @@ const NoteListItem: React.FC<NoteListItemProps> = ({ note, onPress }) => {
     </TouchableOpacity>
   );
 };
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  body: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '500',
+    color: colors.dark,
+    marginBottom: 4,
+  },
+  preview: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4B5563',
+    marginBottom: 8,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  timestamp: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#9CA3AF',
+  },
+});
 
 // Memoized: list re-renders must not re-render every visible row.
 export default React.memo(NoteListItem);
