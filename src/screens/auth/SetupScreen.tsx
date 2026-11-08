@@ -3,19 +3,18 @@
 // no-recovery warning, an optional biometric opt-in, and "Create vault".
 // On success the store has already opened the vault; if the switch is on,
 // enableBiometricUnlock prompts once, then the stack moves to Home.
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import useAuthStore from '../../store/authStore';
-import { checkAuthenticationTypes, describeBiometricMethod } from '../../services/authentication';
+import { biometricActionLabel, describeBiometricMethod } from '../../services/authentication';
 import { useTheme } from '../../theme/useTheme';
 import { rgba } from '../../theme/tokens';
 import { ActionButton, Body, Eyebrow, Kind, ListRow, Screen, Secondary, Switch, TextField, Title } from '../../components/ui';
 import { VaultDoor } from '../../components/features/vault';
 import { checkPasswordStrength } from '../../utils/crypto';
 import { canCreateVault, passwordChecks, strengthLevel } from '../../utils/passwordRules';
-import type { AuthTypes } from '../../types/models';
 import type { ScreenProps } from '../../types/navigation';
 
 const DOOR_SIZE = 112;
@@ -26,22 +25,12 @@ const SetupScreen: React.FC<ScreenProps<'Setup'>> = ({ navigation }) => {
   const setupMasterPassword = useAuthStore((s) => s.setupMasterPassword);
   const enableBiometricUnlock = useAuthStore((s) => s.enableBiometricUnlock);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const authTypes = useAuthStore((s) => s.authTypes);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [wantsBiometric, setWantsBiometric] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [authTypes, setAuthTypes] = useState<AuthTypes | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    checkAuthenticationTypes().then((types) => {
-      if (!cancelled) setAuthTypes(types);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const biometrics = describeBiometricMethod(authTypes);
   const strength = strengthLevel(checkPasswordStrength(password));
@@ -67,15 +56,14 @@ const SetupScreen: React.FC<ScreenProps<'Setup'>> = ({ navigation }) => {
       // is open and the toggle stays available in Settings.
       await enableBiometricUnlock();
     }
+    // The prompt can sit open long enough for auto-lock to fire; a locked
+    // vault must never be followed into Home (AutoLockGate has already
+    // reset the stack to Unlock).
+    if (!useAuthStore.getState().isAuthenticated) return;
     navigation.replace('Home');
   };
 
-  const biometricTitle =
-    biometrics.method === 'face'
-      ? 'Unlock with Face ID'
-      : biometrics.method === 'fingerprint'
-        ? 'Unlock with fingerprint'
-        : 'Unlock with biometrics';
+  const biometricTitle = biometricActionLabel(biometrics.method);
 
   return (
     <Screen hero>

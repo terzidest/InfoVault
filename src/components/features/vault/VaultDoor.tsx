@@ -44,13 +44,15 @@ import {
 
 export type VaultDoorState = 'locked' | 'unlocking' | 'open';
 
-/** How long the caller should wait after `unlocking` before setting `open`. */
-export const UNLOCK_SEQUENCE_MS = 1700;
-
 const BOLTS_MS = 700;
 const WHEEL_MS = 1800;
-const OPEN_SCALE_MS = 800;
 const GLOW_MS = 600;
+/** Door swell on `open`. */
+export const OPEN_SCALE_MS = 600;
+/** How long the caller should wait after `unlocking` before setting `open`: the wheel's full turn. */
+export const UNLOCK_SEQUENCE_MS = WHEEL_MS;
+/** How long the caller should hold the open door before leaving the screen (covers the swell). */
+export const OPEN_HOLD_MS = OPEN_SCALE_MS + 50;
 const HEAT_OPACITY = 0.35;
 const GLOW_OPACITY = 0.45;
 const OPEN_SCALE = 1.06;
@@ -133,12 +135,16 @@ const VaultDoor: React.FC<VaultDoorProps> = ({ size = VIEWBOX, state }) => {
       heat.value = timing(HEAT_OPACITY, BOLTS_MS);
       return;
     }
-    // 'open': the bolt/wheel timings keep running to their ends; only the
-    // door swells and the keyhole lights up. Also covers a direct
-    // locked→open jump (reduced motion callers) by landing the end states.
-    bolt.value = timing(BOLT_TRAVEL, BOLTS_MS);
-    wheel.value = timing(WHEEL_TURNS_DEG, WHEEL_MS, easeWheel);
-    heat.value = timing(HEAT_OPACITY, BOLTS_MS);
+    // 'open': only the door swells and the keyhole lights up. The bolt,
+    // wheel and heat timings started by `unlocking` are left running to
+    // their ends — re-assigning them here would restart them mid-flight.
+    // Under reduced motion a caller may jump locked→open directly, so land
+    // their end states then (nothing is in flight to disturb).
+    if (reduceMotion) {
+      bolt.value = BOLT_TRAVEL;
+      wheel.value = WHEEL_TURNS_DEG;
+      heat.value = HEAT_OPACITY;
+    }
     scale.value = timing(OPEN_SCALE, OPEN_SCALE_MS);
     glow.value = timing(GLOW_OPACITY, GLOW_MS);
   }, [state, reduceMotion, bolt, wheel, heat, scale, glow]);

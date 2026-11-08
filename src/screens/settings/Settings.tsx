@@ -10,7 +10,7 @@ import Constants from 'expo-constants';
 import useSettingsStore from '../../store/settingsStore';
 import useAuthStore from '../../store/authStore';
 import useAuth from '../../hooks/useAuth';
-import { checkAuthenticationTypes, describeBiometricMethod } from '../../services/authentication';
+import { biometricLabel, describeBiometricMethod } from '../../services/authentication';
 import { useTheme } from '../../theme/useTheme';
 import {
   Screen,
@@ -65,7 +65,7 @@ const describeBiometrics = (
     case 'none':
       return { subtitle: 'No fingerprint or face enrolled on this phone', icon, available: false };
     case 'face':
-      return { subtitle: 'Face unlock on this phone', icon, available: true };
+      return { subtitle: `${biometricLabel('face')} on this phone`, icon, available: true };
     case 'fingerprint':
       return { subtitle: 'Fingerprint on this phone', icon, available: true };
     case 'biometrics':
@@ -109,8 +109,9 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const enableBiometricUnlock = useAuthStore((s) => s.enableBiometricUnlock);
   const disableBiometricUnlock = useAuthStore((s) => s.disableBiometricUnlock);
+  const authTypes = useAuthStore((s) => s.authTypes);
+  const refreshAuthTypes = useAuthStore((s) => s.refreshAuthTypes);
 
-  const [authTypes, setAuthTypes] = useState<AuthTypes | null>(null);
   const [timeoutSheetOpen, setTimeoutSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -119,22 +120,14 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
     }
   }, [isAuthenticated, initSettings]);
 
-  useEffect(() => {
-    let cancelled = false;
-    checkAuthenticationTypes().then((types) => {
-      if (!cancelled) setAuthTypes(types);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // Enrolment can change while the app is backgrounded; re-probe on focus.
   useFocusEffect(
     useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
       }
-    }, [isAuthenticated, updateLastActive])
+      refreshAuthTypes();
+    }, [isAuthenticated, updateLastActive, refreshAuthTypes])
   );
 
   const biometrics = describeBiometrics(authTypes);

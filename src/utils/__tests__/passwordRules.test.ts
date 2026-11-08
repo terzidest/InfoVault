@@ -1,5 +1,5 @@
 import { checkPasswordStrength } from '../crypto';
-import { canCreateVault, passwordChecks, strengthLevel } from '../passwordRules';
+import { MIN_MASTER_PASSWORD_LENGTH, canCreateVault, passwordChecks, strengthLevel } from '../passwordRules';
 
 describe('strengthLevel', () => {
   it('lights segments at 25 / 50 / 75 / 90', () => {
@@ -31,12 +31,20 @@ describe('passwordChecks', () => {
   const met = (pw: string) => Object.fromEntries(passwordChecks(pw).map((c) => [c.id, c.met]));
 
   it('reports each rule independently', () => {
-    expect(met('')).toEqual({ length: false, case: false, number: false, symbol: false });
-    expect(met('abcdefghijkl')).toEqual({ length: true, case: false, number: false, symbol: false });
-    expect(met('aB')).toEqual({ length: false, case: true, number: false, symbol: false });
-    expect(met('7')).toEqual({ length: false, case: false, number: true, symbol: false });
-    expect(met('!')).toEqual({ length: false, case: false, number: false, symbol: true });
-    expect(met('Correct-Horse-Battery-9')).toEqual({ length: true, case: true, number: true, symbol: true });
+    expect(met('')).toEqual({ min: false, length: false, case: false, number: false, symbol: false });
+    expect(met('abcdefgh')).toEqual({ min: true, length: false, case: false, number: false, symbol: false });
+    expect(met('abcdefghijkl')).toEqual({ min: true, length: true, case: false, number: false, symbol: false });
+    expect(met('aB')).toEqual({ min: false, length: false, case: true, number: false, symbol: false });
+    expect(met('7')).toEqual({ min: false, length: false, case: false, number: true, symbol: false });
+    expect(met('!')).toEqual({ min: false, length: false, case: false, number: false, symbol: true });
+    expect(met('Correct-Horse-Battery-9')).toEqual({ min: true, length: true, case: true, number: true, symbol: true });
+  });
+
+  it('the first row is the gate (8) and the second the recommendation (12)', () => {
+    const [first, second] = passwordChecks('');
+    expect(MIN_MASTER_PASSWORD_LENGTH).toBe(8);
+    expect(first?.label).toBe('8 or more characters');
+    expect(second?.label).toBe('12 or more (recommended)');
   });
 
   it('needs both cases for the case rule', () => {

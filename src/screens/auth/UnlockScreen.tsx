@@ -8,45 +8,25 @@
 // a stale-timer check so a vault that re-locked mid-animation never
 // navigates past the lock screen.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import useAuthStore from '../../store/authStore';
-import { biometricActionLabel, checkAuthenticationTypes, describeBiometricMethod } from '../../services/authentication';
-import type { BiometricMethodInfo } from '../../services/authentication';
+import { biometricActionLabel, describeBiometricMethod, unlockStatusText } from '../../services/authentication';
 import { useTheme } from '../../theme/useTheme';
 import { ActionButton, BarTitle, Eyebrow, Screen, Secondary, TextField } from '../../components/ui';
-import { UNLOCK_SEQUENCE_MS, VaultDoor, VaultGlow, VaultRipple } from '../../components/features/vault';
+import { OPEN_HOLD_MS, UNLOCK_SEQUENCE_MS, VaultDoor, VaultGlow, VaultRipple } from '../../components/features/vault';
 import type { VaultDoorState } from '../../components/features/vault';
-import type { AuthTypes } from '../../types/models';
 import type { ScreenProps } from '../../types/navigation';
 
 const DOOR_SIZE = 260;
-const GLOW_SIZE = 340;
+// Short windows (keyboard up on a small phone) get a smaller stage.
+const DOOR_SIZE_COMPACT = 220;
+const COMPACT_BELOW_HEIGHT = 700;
+const GLOW_RATIO = 340 / 260;
 const BIO_BUTTON = 64;
-// Pause on the open door before the stack moves to Home.
-const OPEN_HOLD_MS = 300;
-
-// Until the capability check answers, an opted-in user still gets a
-// (generic) biometric button rather than a flash of "Password only".
-const PENDING_BIOMETRICS: BiometricMethodInfo = { method: 'biometrics', label: 'Biometrics', icon: 'finger-print-outline' };
-
-interface StatusInput {
-  isAuthenticated: boolean;
-  isMigrating: boolean;
-  isLoading: boolean;
-  biometrics: BiometricMethodInfo | null;
-}
-
-const statusText = ({ isAuthenticated, isMigrating, isLoading, biometrics }: StatusInput): string => {
-  if (isAuthenticated) return 'Unlocked';
-  if (isMigrating) return 'Upgrading your vault…';
-  if (isLoading) return 'Unlocking…';
-  if (biometrics && biometrics.method !== 'none') return `Locked · ${biometrics.label} ready`;
-  return 'Locked · Password only';
-};
 
 const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
   const { tokens } = useTheme();
@@ -57,10 +37,11 @@ const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
   const isLoading = useAuthStore((s) => s.isLoading);
   const isMigrating = useAuthStore((s) => s.isMigrating);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
+  const authTypes = useAuthStore((s) => s.authTypes);
+  const { height: windowHeight } = useWindowDimensions();
 
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [authTypes, setAuthTypes] = useState<AuthTypes | null>(null);
   // Door state is derived: locked until authenticated, then unlocking until
   // the open timer fires. Reset when the vault locks (adjusting state during
   // render, so no setState lives inside an effect).
@@ -73,22 +54,10 @@ const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
   const door: VaultDoorState = !isAuthenticated ? 'locked' : opened || reduceMotion ? 'open' : 'unlocking';
   const biometricAttempted = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    checkAuthenticationTypes().then((types) => {
-      if (!cancelled) setAuthTypes(types);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const biometrics: BiometricMethodInfo | null = biometricEnabled
-    ? authTypes
-      ? describeBiometricMethod(authTypes)
-      : PENDING_BIOMETRICS
-    : null;
-  const showBiometric = biometrics !== null && biometrics.method !== 'none';
+  const biometrics = describeBiometricMethod(authTypes);
+  const showBiometric = biometricEnabled && biometrics.method !== 'none';
+  const doorSize = windowHeight < COMPACT_BELOW_HEIGHT ? DOOR_SIZE_COMPACT : DOOR_SIZE;
+  const glowSize = Math.round(doorSize * GLOW_RATIO);
 
   // Shows why an unlock attempt failed. The store's authError wins (a corrupt
   // vault is not a wrong password); `fallback` covers the paths that set none.
@@ -157,12 +126,23 @@ const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
   };
 
   const busy = isLoading || isAuthenticated;
-  const status = statusText({ isAuthenticated, isMigrating, isLoading, biometrics });
+  const status = unlockStatusText({
+    isAuthenticated,
+    isMigrating,
+    isLoading,
+    method: biometrics.method,
+    biometricEnabled,
+  });
 
   return (
     <Screen hero>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[styles.content, { paddingHorizontal: tokens.spacing.xxl }]}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[styles.content, { paddingHorizontal: tokens.spacing.xxl, paddingVertical: tokens.spacing.xl }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.brand}>
             <Ionicons name="shield-checkmark-outline" size={22} color={tokens.colors.amber} />
             <BarTitle style={{ marginLeft: tokens.spacing.sm }}>
@@ -171,10 +151,10 @@ const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
             </BarTitle>
           </View>
 
-          <View style={[styles.stage, { width: GLOW_SIZE, height: GLOW_SIZE }]}>
-            <VaultGlow size={GLOW_SIZE} locked={door === 'locked'} />
-            {door !== 'locked' ? <VaultRipple size={DOOR_SIZE} /> : null}
-            <VaultDoor size={DOOR_SIZE} state={door} />
+          <View style={[styles.stage, { width: glowSize, height: glowSize }]}>
+            <VaultGlow size={glowSize} locked={door === 'locked'} />
+            {door !== 'locked' ? <VaultRipple size={doorSize} /> : null}
+            <VaultDoor size={doorSize} state={door} />
           </View>
 
           <Eyebrow style={{ marginBottom: tokens.spacing.xl }} accessibilityLiveRegion="polite">
@@ -239,7 +219,7 @@ const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
               No recovery exists. The password is never stored.
             </Secondary>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -247,7 +227,7 @@ const UnlockScreen: React.FC<ScreenProps<'Unlock'>> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
   brand: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   stage: { alignItems: 'center', justifyContent: 'center' },
   form: { width: '100%', maxWidth: 360, alignItems: 'center' },

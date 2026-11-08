@@ -22,6 +22,7 @@ import { checkAuthenticationTypes } from '../services/authentication';
 import { clearSensitiveClipboard } from '../services/clipboard';
 import useRecordsStore from './recordsStore';
 import { isLiveKey } from './vaultKey';
+import type { AuthTypes } from '../types/models';
 
 // True while a setup or unlock is running. A second attempt (the keyboard's
 // submit racing the biometric prompt, two taps) returns false at once instead
@@ -151,6 +152,11 @@ interface AuthState {
   encryptionKey: Uint8Array | null;
   biometricAvailable: boolean;
   biometricEnabled: boolean;
+  // Device biometric capability from init()'s one probe (null until then or
+  // when the probe failed). Screens read it here instead of probing each;
+  // refreshAuthTypes() re-probes, since enrolment can change in the
+  // background.
+  authTypes: AuthTypes | null;
   // Set when a biometric unlock found the keystore entry gone or unreadable
   // (OS enrollment change invalidates it). The next password unlock re-stores
   // the key copy. In-memory only; it never needs to survive a restart because
@@ -164,6 +170,7 @@ interface AuthState {
   // unlock screen can say the vault is being upgraded rather than just spin.
   isMigrating: boolean;
   init: () => Promise<void>;
+  refreshAuthTypes: () => Promise<void>;
   setupMasterPassword: (password: string) => Promise<boolean>;
   unlockWithPassword: (password: string) => Promise<boolean>;
   unlockWithBiometrics: () => Promise<boolean>;
@@ -227,6 +234,7 @@ const useAuthStore = create<AuthState>((set, get) => {
     encryptionKey: null,
     biometricAvailable: false,
     biometricEnabled: false,
+    authTypes: null,
     biometricRepairNeeded: false,
     hasLegacyData: false,
     isMigrating: false,
@@ -255,8 +263,9 @@ const useAuthStore = create<AuthState>((set, get) => {
         const needsSetup = setupComplete !== 'true' || freshInstall || nothingToUnlock;
 
         let biometricAvailable = false;
+        let authTypes: AuthTypes | null = null;
         try {
-          const authTypes = await checkAuthenticationTypes();
+          authTypes = await checkAuthenticationTypes();
           biometricAvailable = authTypes.hasHardware && authTypes.isEnrolled;
         } catch {
           biometricAvailable = false;
@@ -265,6 +274,7 @@ const useAuthStore = create<AuthState>((set, get) => {
         set({
           needsSetup,
           hasLegacyData,
+          authTypes,
           biometricAvailable,
           // Treat biometric as enabled only when both the user opted in AND the
           // device still has enrolled biometrics; otherwise UI/flow falls back
@@ -280,11 +290,25 @@ const useAuthStore = create<AuthState>((set, get) => {
         set({
           needsSetup: false,
           hasLegacyData: false,
+          authTypes: null,
           biometricAvailable: false,
           biometricEnabled: false,
           isInitialized: true,
           isLoading: false,
         });
+      }
+    },
+
+    // Re-probe the device after a focus: enrolment may have changed while the
+    // app was in the background. Only narrows biometricEnabled (the opt-in
+    // flag itself is left for init/enableBiometricUnlock). Best-effort.
+    refreshAuthTypes: async () => {
+      try {
+        const authTypes = await checkAuthenticationTypes();
+        const biometricAvailable = authTypes.hasHardware && authTypes.isEnrolled;
+        set({ authTypes, biometricAvailable, biometricEnabled: get().biometricEnabled && biometricAvailable });
+      } catch {
+        // Keep the last known capability.
       }
     },
 
