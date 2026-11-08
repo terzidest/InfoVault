@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Home from "../screens/Home";
 import RecordScreen from "../screens/RecordScreen";
+import AddEditRecordScreen from "../screens/AddEditRecordScreen";
 import Authentication from "../screens/auth/Authentication";
 import SetupMasterPassword from "../screens/auth/SetupMasterPassword";
 import CredentialsList from "../screens/credentials/CredentialsList";
@@ -76,6 +77,11 @@ const AppNavigator: React.FC = () => {
         <Stack.Screen
           name="Record"
           component={RecordScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AddEditRecord"
+          component={AddEditRecordScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen

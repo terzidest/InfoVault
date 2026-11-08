@@ -3,17 +3,20 @@ import {
   MAX_TAG_LENGTH,
   TEMPLATE_ORDER,
   addTag,
+  allValuesEmpty,
   countdown,
   expiryBadge,
   hexAlpha,
   isExpiryField,
   isLastEnabledClass,
   kindCycle,
+  moveField,
   normalizeTag,
   normalizeUrl,
   rowCopyTarget,
   subtitleIsMono,
   toggleCharClass,
+  validateDraft,
 } from '../recordUi';
 import type { CharClasses } from '../recordUi';
 import type { Field, FieldKind, VaultRecord } from '../../../../types/models';
@@ -192,5 +195,33 @@ describe('char classes', () => {
 describe('TEMPLATE_ORDER', () => {
   it('lists every template once in the design order', () => {
     expect(TEMPLATE_ORDER).toEqual(['login', 'idNumber', 'idDocument', 'sim', 'card', 'wifi', 'note', 'custom']);
+  });
+});
+
+describe('editor draft helpers', () => {
+  it('allValuesEmpty ignores labels and whitespace', () => {
+    expect(allValuesEmpty([])).toBe(true);
+    expect(allValuesEmpty([field('Username', 'text', '   '), field('Password', 'secret', '')])).toBe(true);
+    expect(allValuesEmpty([field('Username', 'text', ''), field('Password', 'secret', 'x')])).toBe(false);
+  });
+
+  it('moveField swaps with the neighbour and leaves the ends alone', () => {
+    const fields = [field('A', 'text', ''), field('B', 'text', ''), field('C', 'text', '')];
+    expect(moveField(fields, 1, -1).map((f) => f.id)).toEqual(['B', 'A', 'C']);
+    expect(moveField(fields, 1, 1).map((f) => f.id)).toEqual(['A', 'C', 'B']);
+    expect(moveField(fields, 0, -1).map((f) => f.id)).toEqual(['A', 'B', 'C']);
+    expect(moveField(fields, 2, 1).map((f) => f.id)).toEqual(['A', 'B', 'C']);
+    expect(moveField(fields, 0, 1)).not.toBe(fields); // always a copy
+  });
+
+  it('validateDraft requires a title and at least one value, except a field-less Custom record', () => {
+    const value = field('Number', 'number', '123456789');
+    const empty = field('Number', 'number', '');
+    expect(validateDraft({ title: '  ', template: 'idNumber', fields: [value] })).toBe('Give the record a title');
+    expect(validateDraft({ title: 'ΑΦΜ', template: 'idNumber', fields: [empty] })).toBe('Fill in at least one field');
+    expect(validateDraft({ title: 'Note', template: 'note', fields: [] })).toBe('Fill in at least one field');
+    expect(validateDraft({ title: 'ΑΦΜ', template: 'idNumber', fields: [value] })).toBeNull();
+    expect(validateDraft({ title: 'Placeholder', template: 'custom', fields: [] })).toBeNull();
+    expect(validateDraft({ title: 'Placeholder', template: 'custom', fields: [empty] })).toBe('Fill in at least one field');
   });
 });
