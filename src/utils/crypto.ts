@@ -129,7 +129,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isPositiveInt = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value > 0;
 
-const parseKdfParams = (value: unknown): KdfParams => {
+export const parseKdfParams = (value: unknown): KdfParams => {
   if (isRecord(value)) {
     if (value.alg === 'pbkdf2-sha256' && isPositiveInt(value.iterations)) {
       return { alg: value.alg, iterations: value.iterations };

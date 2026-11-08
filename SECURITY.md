@@ -59,7 +59,18 @@ All security-relevant randomness (salts, identifiers, GCM nonces) comes from `ex
 
 ## Storage
 
-`expo-secure-store` is the persistence layer, backed by the iOS Keychain and Android Keystore. InfoVault layers its own application-level AES-GCM encryption on top of this, so the data is protected both by the platform keystore and by the master-password-derived key — meaning raw access to keystore contents alone does not yield plaintext.
+Storage is split by what each store is for. Records never touch SecureStore; SecureStore never holds record data.
+
+| Where | What | Protection |
+| --- | --- | --- |
+| `SecureStore` (iOS Keychain / Android Keystore) | The vault header (KDF parameters, salt, wrapped vault key) and, when biometric unlock is on, a copy of the vault key gated behind the OS biometric prompt | Platform keystore; the header is not secret, the key copy is released only after the biometric check |
+| `vault.bin` in the app's document directory | Every record, serialized as one JSON array and sealed as a single AES-256-GCM blob under the vault key | Application-level AES-256-GCM; the file is unreadable without the vault key, so copying it off the device yields ciphertext only |
+
+The vault file is a small binary container: a magic number and format version, a short plaintext JSON header, a fresh 96-bit nonce per write, and the ciphertext with its GCM tag. The header is passed to GCM as associated data, so it is authenticated even though it is not encrypted — editing it fails decryption. Every write seals the full record set, writes it to a temporary file and moves that over `vault.bin`, keeping the previous file (as `vault.bin.bak`) until the new one is in place; an interruption at any point leaves a complete, decodable vault on disk. The on-disk format is also the export format, with the header carrying the KDF parameters, salt and wrapped key instead.
+
+v1 vaults (one SecureStore entry per record) are migrated on the first unlock after the update: each entry is decrypted with the vault key, mapped to a v2 record and written to `vault.bin`; only after that write succeeds are the v1 entries deleted. An entry that cannot be decrypted is left in place and retried next time.
+
+> This storage layout lands in the app at the v2 storage cutover; until then the shipped app still stores each record as its own SecureStore entry (encrypted with the same AES-256-GCM).
 
 ## Reporting
 
@@ -67,4 +78,4 @@ This is a portfolio / personal project. If you find an issue, open an issue in t
 
 ---
 
-*Last reviewed: 2026-10-19. Keep this date current when the crypto layer changes. This document and the README's security section must stay in sync with the actual implementation — if the code's behavior changes, update both in the same change.*
+*Last reviewed: 2026-11-08. Keep this date current when the crypto layer changes. This document and the README's security section must stay in sync with the actual implementation — if the code's behavior changes, update both in the same change.*
