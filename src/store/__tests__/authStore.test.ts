@@ -80,10 +80,10 @@ beforeEach(() => {
     biometricAvailable: false,
     biometricEnabled: false,
     biometricRepairNeeded: false,
-    isOpeningVault: false,
+    hasLegacyData: false,
     isMigrating: false,
   });
-  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false });
+  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false, migrationPending: false });
   silenceConsole();
 });
 

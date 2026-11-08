@@ -68,7 +68,9 @@ const RecordScreen: React.FC<ScreenProps<'Record'>> = ({ navigation, route }) =>
           tone={record.pinned ? 'amber' : 'default'}
           accessibilityLabel={record.pinned ? 'Unpin record' : 'Pin record'}
           onPress={() => {
-            togglePin(record.id).catch(() => {});
+            togglePin(record.id).catch(() => {
+              Alert.alert('Could not update', 'The pin was not saved. Try again.');
+            });
           }}
         />
         <Pressable

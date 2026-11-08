@@ -42,19 +42,40 @@ beforeEach(() => {
   fsMock.__reset();
   secureStoreMock.__reset();
   useAuthStore.setState({ encryptionKey: null, isAuthenticated: false });
-  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false });
+  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false, migrationPending: false });
   jest.spyOn(console, 'error').mockImplementation(() => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('open', () => {
-  it('yields an empty set, and writes no file, when there is neither a vault nor v1 data', async () => {
-    await unlockWith();
+  it('yields an empty set, and seals an empty vault file, when there is neither a vault nor v1 data', async () => {
+    const key = await unlockWith();
     expect(await useRecordsStore.getState().open()).toBe(true);
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(true);
     expect(useRecordsStore.getState().isLoading).toBe(false);
-    expect(vaultExists()).toBe(false);
+    expect(useRecordsStore.getState().migrationPending).toBe(false);
+    // A header must never exist without a file (authStore's fresh-install rule).
+    expect(vaultExists()).toBe(true);
+    expect(await read(key)).toEqual([]);
+  });
+
+  it('writes the file when v1 registries exist but hold nothing to migrate', async () => {
+    const key = await unlockWith();
+    secureStoreMock.__store.set('credentialKeys', '[]');
+    expect(await useRecordsStore.getState().open()).toBe(true);
+    expect(vaultExists()).toBe(true);
+    expect(await read(key)).toEqual([]);
+    expect(secureStoreMock.__store.has('credentialKeys')).toBe(false);
+  });
+
+  it('does not rewrite a file that already exists on open', async () => {
+    const key = await unlockWith();
+    const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
+    await write(stored, key);
+    const bytes = fsMock.__files.get(VAULT);
+    await useRecordsStore.getState().open();
+    expect(fsMock.__files.get(VAULT)).toBe(bytes);
   });
 
   it('loads an existing vault file', async () => {
@@ -148,8 +169,18 @@ describe('open', () => {
     expect(useRecordsStore.getState().records).toEqual(stored);
     expect(useRecordsStore.getState().isOpen).toBe(true);
     expect(useRecordsStore.getState().error).toBeNull();
+    expect(useRecordsStore.getState().migrationPending).toBe(true);
     expect(secureStoreMock.__store.has('c1')).toBe(true);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('migration failed'), 'Error');
+
+    // The next pass completes (the entry decrypts again): the flag clears and c1 is in.
+    jest.restoreAllMocks();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    useRecordsStore.getState().clear();
+    await useRecordsStore.getState().open();
+    expect(useRecordsStore.getState().migrationPending).toBe(false);
+    expect(useRecordsStore.getState().records.map((r) => r.id).sort()).toEqual(['a', 'c1']);
+    expect(secureStoreMock.__store.has('c1')).toBe(false);
   });
 
   it('throws while locked and opens nothing', async () => {
@@ -291,11 +322,12 @@ describe('mutations persist through the vault file', () => {
   it('update, remove and togglePin of a missing id throw and write nothing', async () => {
     await unlockWith();
     await useRecordsStore.getState().open();
+    const bytes = fsMock.__files.get(VAULT);
     await expect(useRecordsStore.getState().update('nope', { title: 'x' })).rejects.toThrow('Record not found');
     await expect(useRecordsStore.getState().remove('nope')).rejects.toThrow('Record not found');
     await expect(useRecordsStore.getState().togglePin('nope')).rejects.toThrow('Record not found');
     expect(useRecordsStore.getState().error).toBe('Record not found');
-    expect(vaultExists()).toBe(false);
+    expect(fsMock.__files.get(VAULT)).toBe(bytes); // the empty vault open() sealed, untouched
   });
 
   it('refuses to mutate before open() succeeded, so a stale vault is never overwritten', async () => {
@@ -365,7 +397,7 @@ describe('mutations persist through the vault file', () => {
     const huge = loginInput('Huge');
     huge.fields[0] = { ...huge.fields[0]!, value: 'x'.repeat(MAX_RECORD_BYTES) };
     await expect(useRecordsStore.getState().add(huge)).rejects.toThrow(RecordTooLargeError);
-    expect(vaultExists()).toBe(false);
+    expect(await read(key)).toEqual([]);
 
     const ok = await useRecordsStore.getState().add(loginInput('Ok'));
     await expect(useRecordsStore.getState().update(ok.id, { fields: huge.fields })).rejects.toThrow(

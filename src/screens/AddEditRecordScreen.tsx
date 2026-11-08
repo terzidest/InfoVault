@@ -3,7 +3,7 @@
 // edits label, value and kind, can be reordered, removed, or filled from the
 // password generator. Saving goes through recordsStore, which validates the
 // shape and the 64 KB size cap and seals the whole vault.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -42,6 +42,9 @@ const AddEditRecordScreen: React.FC<ScreenProps<'AddEditRecord'>> = ({ navigatio
   const { tokens } = useTheme();
   const add = useRecordsStore((s) => s.add);
   const update = useRecordsStore((s) => s.update);
+  // Editing a record that is gone (deleted elsewhere, or the vault locked and
+  // emptied the store): nothing to save into, so leave.
+  const recordMissing = useRecordsStore((s) => id !== undefined && !s.records.some((r) => r.id === id));
   const updateLastActive = useAuthStore((s) => s.updateLastActive);
 
   // The draft is seeded once from the store; later store changes (another
@@ -55,6 +58,10 @@ const AddEditRecordScreen: React.FC<ScreenProps<'AddEditRecord'>> = ({ navigatio
   const [generatorFor, setGeneratorFor] = useState<string | null>(null);
 
   const editing = id !== undefined;
+
+  useEffect(() => {
+    if (recordMissing && navigation.canGoBack()) navigation.goBack();
+  }, [recordMissing, navigation]);
 
   const patch = (changes: Partial<Draft>) => {
     setError(null);

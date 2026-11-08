@@ -79,6 +79,20 @@ const clearVaultEntries = async (): Promise<void> => {
   }
 };
 
+// Undoes a setup that failed after its header was written. Nothing of value
+// exists yet (setup starts from a wiped vault), so the clean outcome is a
+// device with no vault at all and Setup on the next launch. Best-effort: a
+// leftover header with no file is caught by init()'s fresh-install rule.
+const rollbackSetup = async (): Promise<void> => {
+  try {
+    await SecureStore.deleteItemAsync(HEADER_KEY);
+    await SecureStore.deleteItemAsync(SETUP_KEY);
+    await removeVault();
+  } catch {
+    // init() will finish the job.
+  }
+};
+
 type OpenVaultResult =
   | { status: 'unlocked'; vaultKey: Uint8Array }
   | { status: 'wrong-password' }
@@ -141,11 +155,12 @@ interface AuthState {
   // the key copy. In-memory only; it never needs to survive a restart because
   // the same biometric failure will set it again.
   biometricRepairNeeded: boolean;
-  // True while recordsStore.open() runs after the key was obtained (reading
-  // and, on the first unlock after the v2 update, migrating the records).
-  isOpeningVault: boolean;
-  // True during that open when v1 entries were found, so the unlock screen can
-  // say the vault is being upgraded rather than just spin.
+  // Result of init()'s one registry probe: v1 (pre-2.0) record entries are on
+  // the device and will be migrated by the next open(). Refreshed after each
+  // open from recordsStore.migrationPending, so a retry still shows as one.
+  hasLegacyData: boolean;
+  // True while recordsStore.open() runs with v1 entries to convert, so the
+  // unlock screen can say the vault is being upgraded rather than just spin.
   isMigrating: boolean;
   init: () => Promise<void>;
   setupMasterPassword: (password: string) => Promise<boolean>;
@@ -164,16 +179,12 @@ const useAuthStore = create<AuthState>((set, get) => {
   // open the key is zeroed and dropped: no half-unlocked session, and the
   // error message carries nothing from the file.
   const openRecords = async (key: Uint8Array): Promise<boolean> => {
-    let migrating = false;
-    try {
-      migrating = await hasV1Data();
-    } catch {
-      migrating = false;
-    }
-    set({ encryptionKey: key, isOpeningVault: true, isMigrating: migrating });
+    set({ encryptionKey: key, isMigrating: get().hasLegacyData });
     try {
       const opened = await useRecordsStore.getState().open();
-      set({ isOpeningVault: false, isMigrating: false });
+      // A migration that threw leaves v1 entries for the next unlock, which
+      // is then again an upgrade.
+      set({ isMigrating: false, hasLegacyData: useRecordsStore.getState().migrationPending });
       // false: locked while opening; the lock already zeroed and dropped the key.
       return opened;
     } catch (error) {
@@ -183,7 +194,6 @@ const useAuthStore = create<AuthState>((set, get) => {
       set({
         encryptionKey: null,
         isAuthenticated: false,
-        isOpeningVault: false,
         isMigrating: false,
         isLoading: false,
         authError: 'Vault could not be opened',
@@ -202,7 +212,7 @@ const useAuthStore = create<AuthState>((set, get) => {
     biometricAvailable: false,
     biometricEnabled: false,
     biometricRepairNeeded: false,
-    isOpeningVault: false,
+    hasLegacyData: false,
     isMigrating: false,
 
     init: async () => {
@@ -219,8 +229,10 @@ const useAuthStore = create<AuthState>((set, get) => {
         // open is a reinstall, not a corrupt vault. Clear it and run setup. A
         // v1 install that has not migrated yet still has its registries, and a
         // commit interrupted mid-move still has `.bak` (vaultExists covers it).
+        // One probe per launch; openRecords reuses the answer.
+        const hasLegacyData = await hasV1Data();
         const hasKeyMaterial = setupComplete === 'true' || header !== null || legacySalt !== null;
-        if (hasKeyMaterial && !vaultExists() && !(await hasV1Data())) {
+        if (hasKeyMaterial && !vaultExists() && !hasLegacyData) {
           await clearVaultEntries();
           setupComplete = null;
           enabledFlag = null;
@@ -236,6 +248,7 @@ const useAuthStore = create<AuthState>((set, get) => {
 
         set({
           needsSetup: setupComplete !== 'true',
+          hasLegacyData,
           biometricAvailable,
           // Treat biometric as enabled only when both the user opted in AND the
           // device still has enrolled biometrics; otherwise UI/flow falls back
@@ -250,6 +263,7 @@ const useAuthStore = create<AuthState>((set, get) => {
         console.error('Auth init error', error);
         set({
           needsSetup: false,
+          hasLegacyData: false,
           biometricAvailable: false,
           biometricEnabled: false,
           isInitialized: true,
@@ -273,26 +287,23 @@ const useAuthStore = create<AuthState>((set, get) => {
         await SecureStore.setItemAsync(SETUP_KEY, 'true');
 
         lastActivityAt = Date.now();
-        set({ encryptionKey: key, needsSetup: false, isOpeningVault: true, isMigrating: false });
+        // wipeAllRecords just ran: nothing v1 is left to migrate.
+        set({ encryptionKey: key, needsSetup: false, hasLegacyData: false });
         await writeVault({ records: [] }, key, isLiveKey);
-        const opened = await useRecordsStore.getState().open();
-        if (!opened) {
-          // Locked while opening: the lock already zeroed and dropped the key.
-          set({ isAuthenticated: false, isLoading: false, isOpeningVault: false });
-          return false;
-        }
-        set({ isAuthenticated: true, isLoading: false, isOpeningVault: false });
+        if (!(await openRecords(key))) throw new Error('Vault did not open after setup');
+        set({ isAuthenticated: true, isLoading: false });
         return true;
       } catch (error) {
-        // The header may already be written; init() treats a header with no
-        // vault file as a fresh install, so the next launch runs setup again.
+        // Roll back to "no vault": nothing valuable exists yet, and a clean
+        // Setup on the next launch beats a header nobody can open.
         console.error('Vault setup error', error);
         key?.fill(0);
         useRecordsStore.getState().clear();
+        await rollbackSetup();
         set({
           encryptionKey: null,
           isAuthenticated: false,
-          isOpeningVault: false,
+          needsSetup: true,
           isMigrating: false,
           authError: 'Could not set up your vault',
           isLoading: false,
@@ -413,7 +424,7 @@ const useAuthStore = create<AuthState>((set, get) => {
       // Locking must drop every trace of the unlocked session: zero the key
       // bytes and evict the decrypted records from recordsStore.
       get().encryptionKey?.fill(0);
-      set({ isAuthenticated: false, encryptionKey: null, isOpeningVault: false, isMigrating: false });
+      set({ isAuthenticated: false, encryptionKey: null, isMigrating: false });
       useRecordsStore.getState().clear();
       clearSensitiveClipboard();
     },

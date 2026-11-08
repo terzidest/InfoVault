@@ -57,6 +57,7 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
   const { isAuthenticated, updateLastActive, logout } = useAuth();
   // Field-level selectors: never re-render Home for isLoading flips.
   const records = useRecordsStore((s) => s.records);
+  const migrationPending = useRecordsStore((s) => s.migrationPending);
   const sortMode = useSettingsStore((s) => s.settings.sortMode);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
   const [query, setQuery] = useState('');
@@ -83,6 +84,27 @@ const Home: React.FC<ScreenProps<'Home'>> = ({ navigation }) => {
 
   const header = (
     <View>
+      {migrationPending ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.notice,
+            {
+              marginHorizontal: tokens.spacing.lg,
+              marginBottom: tokens.spacing.lg,
+              padding: tokens.spacing.md,
+              borderRadius: tokens.radius.lg,
+              backgroundColor: tokens.colors.surface,
+              borderColor: tokens.colors.line,
+            },
+          ]}
+        >
+          <Ionicons name="time-outline" size={18} color={tokens.colors.amberText} />
+          <Secondary style={[styles.noticeText, { marginLeft: tokens.spacing.sm }]}>
+            Some records are still being upgraded. They&apos;ll appear after the next unlock.
+          </Secondary>
+        </View>
+      ) : null}
       {pinned.length > 0 ? (
         <View style={{ marginBottom: tokens.spacing.lg }}>
           <Eyebrow style={{ paddingHorizontal: tokens.spacing.lg, marginBottom: tokens.spacing.sm }}>Pinned</Eyebrow>
@@ -212,6 +234,8 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   sortButton: { minHeight: 32, justifyContent: 'center' },
+  notice: { flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
+  noticeText: { flex: 1 },
   empty: { alignItems: 'center' },
   emptyText: { textAlign: 'center', marginBottom: 20 },
   emptyButton: { alignSelf: 'stretch' },

@@ -36,7 +36,12 @@ const Authentication: React.FC<ScreenProps<'Authentication'>> = ({ navigation })
       // leaves the screen in place with the password input as fallback.
       if (biometricEnabled && !biometricAttempted.current) {
         biometricAttempted.current = true;
-        unlockWithBiometrics();
+        unlockWithBiometrics().then((ok) => {
+          // Same as the button: an open failure must be shown, a dismissed
+          // prompt says nothing (authError stays null).
+          const auth = useAuthStore.getState();
+          if (!ok && !auth.isAuthenticated) setError(auth.authError);
+        });
       }
       return () => {
         biometricAttempted.current = false;

@@ -91,10 +91,10 @@ beforeEach(() => {
     biometricAvailable: false,
     biometricEnabled: false,
     biometricRepairNeeded: false,
-    isOpeningVault: false,
+    hasLegacyData: false,
     isMigrating: false,
   });
-  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false });
+  useRecordsStore.setState({ records: [], isLoading: false, error: null, isOpen: false, migrationPending: false });
   jest.spyOn(console, 'error').mockImplementation(() => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -163,7 +163,6 @@ describe('setup', () => {
 
     expect(await auth().setupMasterPassword('fresh-pass-123')).toBe(true);
     expect(auth().isAuthenticated).toBe(true);
-    expect(auth().isOpeningVault).toBe(false);
     expect(records().isOpen).toBe(true);
     expect(records().records).toEqual([]);
     expect(fsMock.__files.has(`${VAULT}.bak`)).toBe(false);
@@ -175,16 +174,32 @@ describe('setup', () => {
     expect((await readVaultPayload(key))?.records).toEqual([a]);
   });
 
-  it('a failure after the header is written leaves no key, no session and an error', async () => {
+  it('a failure after the header is written rolls back to "no vault": header and flag gone, needsSetup, no key', async () => {
     jest.spyOn(FileSystem.File.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
     expect(await auth().setupMasterPassword('fresh-pass-123')).toBe(false);
     expect(auth().isAuthenticated).toBe(false);
+    expect(auth().needsSetup).toBe(true);
     expect(auth().encryptionKey).toBeNull();
     expect(auth().authError).toBe('Could not set up your vault');
     expect(records().isOpen).toBe(false);
-    // The next launch sees a header with no vault: setup again.
+    expect(secureStoreMock.__store.has(HEADER_KEY)).toBe(false);
+    expect(secureStoreMock.__store.has(SETUP_KEY)).toBe(false);
+    expect(vaultExists()).toBe(false);
+    // The next launch is a clean Setup, and a retry works.
     await auth().init();
     expect(auth().needsSetup).toBe(true);
+    expect(await auth().setupMasterPassword('fresh-pass-123')).toBe(true);
+    expect(auth().isAuthenticated).toBe(true);
+  });
+
+  it('an open that fails right after setup rolls back the same way', async () => {
+    // writeVault succeeds, then open()'s read is sabotaged.
+    jest.spyOn(FileSystem.File.prototype, 'bytes').mockRejectedValueOnce(new Error('I/O'));
+    expect(await auth().setupMasterPassword('fresh-pass-123')).toBe(false);
+    expect(auth().needsSetup).toBe(true);
+    expect(auth().encryptionKey).toBeNull();
+    expect(secureStoreMock.__store.has(HEADER_KEY)).toBe(false);
+    expect(vaultExists()).toBe(false);
   });
 });
 
@@ -198,7 +213,6 @@ describe('unlock', () => {
 
     expect(await auth().unlockWithPassword('fresh-pass-123')).toBe(true);
     expect(auth().isAuthenticated).toBe(true);
-    expect(auth().isOpeningVault).toBe(false);
     expect(auth().isMigrating).toBe(false);
     expect(records().isOpen).toBe(true);
     expect(records().records.map((r) => r.title)).toEqual(['A', 'B']);
@@ -277,6 +291,77 @@ describe('unlock', () => {
     expect(records().records.map((r) => r.id)).toEqual(['cred-1', 'note-1']);
   });
 
+  it('a v1 device with an empty registry gets a vault file on unlock, so the next launch is not a reinstall', async () => {
+    await seedV1Device('correct-pw');
+    const store = secureStoreMock.__store;
+    store.delete('cred-1');
+    store.delete('note-1');
+    store.delete('noteKeys');
+    store.set('credentialKeys', '[]');
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+    expect(auth().hasLegacyData).toBe(true);
+
+    expect(await auth().unlockWithPassword('correct-pw')).toBe(true);
+    expect(records().records).toEqual([]);
+    expect(vaultExists()).toBe(true); // the empty set was sealed and written
+    expect(store.has(HEADER_KEY)).toBe(true);
+    expect(store.has('credentialKeys')).toBe(false);
+    expect(auth().hasLegacyData).toBe(false);
+
+    lock();
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+    expect(store.has(HEADER_KEY)).toBe(true);
+    expect(await auth().unlockWithPassword('correct-pw')).toBe(true);
+  });
+
+  it('a header with no file and no registries at all still gets a vault file on unlock', async () => {
+    // The PR #28 state: header migrated, never a single record, no file. Reached
+    // without init() (which would read it as a reinstall), e.g. an app that was
+    // already running when the update landed.
+    await seedV1Device('correct-pw');
+    const store = secureStoreMock.__store;
+    for (const k of ['cred-1', 'note-1', 'credentialKeys', 'noteKeys']) store.delete(k);
+    expect(await auth().unlockWithPassword('correct-pw')).toBe(true);
+    expect(vaultExists()).toBe(true);
+    lock();
+    await auth().init();
+    expect(auth().needsSetup).toBe(false);
+    expect(store.has(HEADER_KEY)).toBe(true);
+  });
+
+  it('isMigrating comes from init()\'s probe (no second probe) and is off afterwards', async () => {
+    await seedV1Device('correct-pw');
+    await auth().init();
+    expect(auth().hasLegacyData).toBe(true);
+    const probe = jest.spyOn(SecureStore, 'getItemAsync');
+    const flags: boolean[] = [];
+    const unsubscribe = useAuthStore.subscribe((s) => flags.push(s.isMigrating));
+    await auth().unlockWithPassword('correct-pw');
+    unsubscribe();
+    expect(flags).toContain(true);
+    expect(auth().isMigrating).toBe(false);
+    expect(auth().hasLegacyData).toBe(false);
+    // Registry reads during unlock: migrateV1's own one probe (3 keys), nothing from authStore.
+    const registryReads = probe.mock.calls.filter(([k]) => /Keys$/.test(String(k)));
+    expect(registryReads).toHaveLength(3);
+  });
+
+  it('a migration that threw leaves hasLegacyData on, so the retry still shows as an upgrade', async () => {
+    await seedV1Device('correct-pw');
+    await auth().init();
+    const realGet = SecureStore.getItemAsync;
+    jest.spyOn(SecureStore, 'getItemAsync').mockImplementation(async (k, o) => {
+      if (k === 'cred-1') throw new Error('keystore unavailable');
+      return realGet(k, o);
+    });
+    expect(await auth().unlockWithPassword('correct-pw')).toBe(true);
+    expect(records().migrationPending).toBe(true);
+    expect(auth().hasLegacyData).toBe(true);
+    expect(auth().isMigrating).toBe(false);
+  });
+
   it('isMigrating is on while a v1 device opens and off afterwards', async () => {
     await seedV1Device('correct-pw');
     await auth().init();
@@ -300,7 +385,6 @@ describe('unlock', () => {
     expect(await auth().unlockWithPassword('fresh-pass-123')).toBe(false);
     expect(auth().isAuthenticated).toBe(false);
     expect(auth().encryptionKey).toBeNull();
-    expect(auth().isOpeningVault).toBe(false);
     expect(auth().isLoading).toBe(false);
     expect(auth().authError).toBe('Vault could not be opened');
     expect(records().isOpen).toBe(false);

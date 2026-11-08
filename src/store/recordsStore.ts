@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createOpTracker } from './opTracker';
 import { isLiveKey, requireKey } from './vaultKey';
 import { migrateV1 } from '../services/migrateV1';
-import { readVaultPayload, writeVault } from '../services/vaultFile';
+import { readVaultPayload, vaultExists, writeVault } from '../services/vaultFile';
 import { generateSecureId } from '../utils/crypto';
 import { errorMessage } from '../utils/errors';
 import { MAX_RECORD_BYTES, serializedSize, touchRecord } from '../utils/records';
@@ -29,6 +29,10 @@ export interface RecordsState {
   error: string | null;
   // True once open() has populated `records` for the current unlock.
   isOpen: boolean;
+  // True when the last open() could not run the v1 migration (it threw) and so
+  // v1 entries may still be waiting. Cleared by the next open() whose pass
+  // completes. Home shows a notice while it is set.
+  migrationPending: boolean;
   // Loads the vault under the key authStore currently holds. Resolves true
   // when the records were published, false when the open was abandoned
   // because the vault locked or was cleared meanwhile (not an error).
@@ -137,6 +141,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
     isLoading: false,
     error: null,
     isOpen: false,
+    migrationPending: false,
 
     open: () =>
       enqueue(async () => {
@@ -159,12 +164,20 @@ const useRecordsStore = create<RecordsState>((set, get) => {
             return null;
           });
           // readVaultPayload also recovers a vault whose last commit was
-          // interrupted — never gate on vaultExists. No file is written here
-          // when there is none: setup/unlock (cutover PR) decides that.
+          // interrupted — never gate on vaultExists for the read.
           const stored = migration?.hadV1 ? migration : await readVaultPayload(key);
           if (!isCurrent(key, gen)) return false;
+          const records = stored?.records ?? [];
           migratedV1Ids = stored?.migratedV1Ids ?? [];
-          set({ records: stored?.records ?? [], isOpen: true });
+          // A vault file must exist whenever a header does: authStore.init()
+          // reads "header but no file" as a reinstall and wipes the header. A
+          // v1 install with nothing to migrate (empty or absent registries)
+          // reaches here with no file, so seal the (possibly empty) set now.
+          if (!vaultExists()) {
+            await writeVault({ records, migratedV1Ids }, key, isLiveKey);
+            if (!isCurrent(key, gen)) return false;
+          }
+          set({ records, isOpen: true, migrationPending: migration === null });
           return true;
         } catch (error) {
           // Locked or cleared mid-open: the lock zeroed the key, so the read
