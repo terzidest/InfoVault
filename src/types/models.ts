@@ -63,3 +63,35 @@ export interface AuthTypes {
   hasFingerprintId: boolean;
   hasIris: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// v2 unified record model (INFOVAULT_V2_SPEC.md §1). The v1 types above stay
+// until the storage cutover; the migration maps them with utils/records.ts.
+// Named VaultRecord rather than Record to avoid shadowing TS's Record<K, V>.
+// ---------------------------------------------------------------------------
+
+export type FieldKind = 'text' | 'secret' | 'number' | 'date' | 'url' | 'multiline';
+
+export type TemplateId = 'login' | 'idNumber' | 'idDocument' | 'sim' | 'card' | 'wifi' | 'note' | 'custom';
+
+export interface Field {
+  id: string;
+  label: string;
+  value: string;
+  kind: FieldKind;
+}
+
+export interface VaultRecord {
+  id: string;
+  title: string;
+  template: TemplateId;
+  fields: Field[];
+  pinned: boolean;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type VaultRecordInput = Omit<VaultRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export type SortMode = 'lastUsed' | 'az';
