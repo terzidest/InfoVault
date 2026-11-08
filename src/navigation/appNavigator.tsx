@@ -6,7 +6,7 @@ import Home from "../screens/Home";
 import RecordScreen from "../screens/RecordScreen";
 import AddEditRecordScreen from "../screens/AddEditRecordScreen";
 import UnlockScreen from "../screens/auth/UnlockScreen";
-import SetupMasterPassword from "../screens/auth/SetupMasterPassword";
+import SetupScreen from "../screens/auth/SetupScreen";
 import Settings from "../screens/settings/Settings";
 
 import useAuthStore from "../store/authStore";
@@ -28,7 +28,7 @@ const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
-        initialRouteName={needsSetup ? "SetupMasterPassword" : "Unlock"}
+        initialRouteName={needsSetup ? "Setup" : "Unlock"}
         screenOptions={{
           headerShown: false,
           // Transparent so the Screen root's own background shows during
@@ -37,7 +37,7 @@ const AppNavigator: React.FC = () => {
           animation: "slide_from_right",
         }}
       >
-        <Stack.Screen name="SetupMasterPassword" component={SetupMasterPassword} />
+        <Stack.Screen name="Setup" component={SetupScreen} />
         <Stack.Screen name="Unlock" component={UnlockScreen} />
         <Stack.Screen name="Home" component={Home} options={{ gestureEnabled: false }} />
         <Stack.Screen name="Record" component={RecordScreen} />
