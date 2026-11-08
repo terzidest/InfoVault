@@ -5,18 +5,22 @@ import { hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
 import useAuthStore from '../../store/authStore';
 import { generateVaultKey } from '../../utils/crypto';
 import {
-  VaultFileAuthError,
-  VaultFileFormatError,
   commitVaultBytes,
-  decodeVaultFile,
-  encodeVaultFile,
-  isVaultRecord,
+  encodeVault,
   readVault,
+  readVaultPayload,
   removeVault,
   vaultExists,
   writeVault,
 } from '../vaultFile';
-import type { VaultFileHeader } from '../vaultFile';
+import {
+  VaultFileAuthError,
+  VaultFileFormatError,
+  decodeVaultFile,
+  encodeVaultFile,
+  isVaultRecord,
+} from '../../utils/vaultFormat';
+import type { VaultFileHeader } from '../../utils/vaultFormat';
 import { FIXTURE_BYTES_BASE64, FIXTURE_KEY_HEX, FIXTURE_RECORDS } from '../__fixtures__/vaultFile.v1';
 import type { VaultRecord } from '../../types/models';
 
@@ -73,14 +77,14 @@ beforeEach(async () => {
 describe('encodeVaultFile / decodeVaultFile', () => {
   it.each([0, 3, 500])('round-trips %i records', async (n) => {
     const records = makeRecords(n);
-    const bytes = await encodeVaultFile(records, key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: records }, key, VAULT_HEADER);
     const decoded = decodeVaultFile(bytes, key);
     expect(decoded.header).toEqual(VAULT_HEADER);
     expect(decoded.records).toEqual(records);
   });
 
   it('lays the container out as magic | version | headerLen | header | nonce | ciphertext+tag', async () => {
-    const bytes = await encodeVaultFile([], key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: [] }, key, VAULT_HEADER);
     expect(Array.from(bytes.subarray(0, 4))).toEqual(Array.from(utf8ToBytes('IVLT')));
     expect(bytes[4]).toBe(1);
     const header = JSON.stringify(VAULT_HEADER);
@@ -93,8 +97,8 @@ describe('encodeVaultFile / decodeVaultFile', () => {
   });
 
   it('draws a fresh nonce per write, so identical content never produces identical bytes', async () => {
-    const a = await encodeVaultFile(makeRecords(2), key, VAULT_HEADER);
-    const b = await encodeVaultFile(makeRecords(2), key, VAULT_HEADER);
+    const a = await encodeVault({ records: makeRecords(2) }, key, VAULT_HEADER);
+    const b = await encodeVault({ records: makeRecords(2) }, key, VAULT_HEADER);
     expect(Array.from(a.subarray(nonceStart(a), ciphertextStart(a)))).not.toEqual(
       Array.from(b.subarray(nonceStart(b), ciphertextStart(b)))
     );
@@ -102,7 +106,7 @@ describe('encodeVaultFile / decodeVaultFile', () => {
   });
 
   it('rejects a bad magic and an unknown format version with VaultFileFormatError', async () => {
-    const bytes = await encodeVaultFile(makeRecords(1), key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: makeRecords(1) }, key, VAULT_HEADER);
     const badMagic = new Uint8Array(bytes);
     badMagic[0] = 0x58;
     expect(() => decodeVaultFile(badMagic, key)).toThrow(VaultFileFormatError);
@@ -113,7 +117,7 @@ describe('encodeVaultFile / decodeVaultFile', () => {
   });
 
   it('rejects truncated input at every cut point', async () => {
-    const bytes = await encodeVaultFile(makeRecords(2), key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: makeRecords(2) }, key, VAULT_HEADER);
     for (let cut = 1; cut < bytes.length; cut += 7) {
       const truncated = bytes.subarray(0, cut);
       let caught: unknown;
@@ -128,7 +132,7 @@ describe('encodeVaultFile / decodeVaultFile', () => {
   });
 
   it('detects a flipped ciphertext byte, a flipped tag byte and a wrong key as VaultFileAuthError', async () => {
-    const bytes = await encodeVaultFile(makeRecords(3), key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: makeRecords(3) }, key, VAULT_HEADER);
     const flipped = new Uint8Array(bytes);
     const at = ciphertextStart(bytes) + 5;
     flipped[at] = (flipped[at] ?? 0) ^ 0x01;
@@ -149,7 +153,7 @@ describe('encodeVaultFile / decodeVaultFile', () => {
       salt: 'aa'.repeat(16),
       wrappedKey: 'v1:00:00',
     };
-    const bytes = await encodeVaultFile(makeRecords(1), key, header);
+    const bytes = await encodeVault({ records: makeRecords(1) }, key, header);
     // Same length edit so the layout stays valid and only the AAD changes.
     const edited = new Uint8Array(bytes);
     const headerText = new TextDecoder().decode(edited.subarray(HEADER_START, nonceStart(edited)));
@@ -160,7 +164,7 @@ describe('encodeVaultFile / decodeVaultFile', () => {
   });
 
   it('rejects a malformed header before touching the ciphertext', async () => {
-    const bytes = await encodeVaultFile(makeRecords(1), key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: makeRecords(1) }, key, VAULT_HEADER);
     const edited = new Uint8Array(bytes);
     edited.set(utf8ToBytes('{"kind":"nope!"}'), HEADER_START); // same length as {"kind":"vault"}
     expect(() => decodeVaultFile(edited, key)).toThrow(VaultFileFormatError);
@@ -182,7 +186,7 @@ describe('encodeVaultFile / decodeVaultFile', () => {
       },
     ];
     for (const header of headers) {
-      const bytes = await encodeVaultFile(makeRecords(2), key, header);
+      const bytes = await encodeVault({ records: makeRecords(2) }, key, header);
       const decoded = decodeVaultFile(bytes, key);
       expect(decoded.header).toEqual(header);
       expect(decoded.records).toEqual(makeRecords(2));
@@ -191,9 +195,9 @@ describe('encodeVaultFile / decodeVaultFile', () => {
 
   it('refuses to encode malformed records, and rejects a sealed payload whose records are not records', async () => {
     const bad = [{ id: 1, title: 'x' }] as unknown as VaultRecord[];
-    await expect(encodeVaultFile(bad, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+    await expect(encodeVault({ records: bad }, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
     const missingTimestamps = [{ ...makeRecord(1), createdAt: undefined }] as unknown as VaultRecord[];
-    await expect(encodeVaultFile(missingTimestamps, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+    await expect(encodeVault({ records: missingTimestamps }, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
 
     // Seal a bad payload by hand (same layout and AAD) to exercise the decode-side guard.
     const headerBytes = utf8ToBytes(JSON.stringify(VAULT_HEADER));
@@ -221,8 +225,8 @@ describe('encodeVaultFile / decodeVaultFile', () => {
     ] as unknown as VaultRecord[];
     expect(isVaultRecord(badTemplate[0])).toBe(false);
     expect(isVaultRecord(badKind[0])).toBe(false);
-    await expect(encodeVaultFile(badTemplate, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
-    await expect(encodeVaultFile(badKind, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+    await expect(encodeVault({ records: badTemplate }, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
+    await expect(encodeVault({ records: badKind }, key, VAULT_HEADER)).rejects.toThrow(VaultFileFormatError);
   });
 });
 
@@ -303,7 +307,7 @@ describe('readVault / writeVault', () => {
 
     // And a successful one replaces it cleanly.
     fsMock.__files.delete(VAULT);
-    fsMock.__files.set(BAK, await encodeVaultFile(before, key, VAULT_HEADER));
+    fsMock.__files.set(BAK, await encodeVault({ records: before }, key, VAULT_HEADER));
     fsMock.__files.set(TMP, new Uint8Array([1, 2, 3]));
     await writeVault(makeRecords(5), key);
     expect([...fsMock.__files.keys()]).toEqual([VAULT]);
@@ -316,7 +320,7 @@ describe('readVault / writeVault', () => {
     const good = fsMock.__files.get(VAULT) ?? new Uint8Array();
     fsMock.__files.delete(VAULT);
     fsMock.__files.set(BAK, good);
-    const newer = await encodeVaultFile(makeRecords(9), key, VAULT_HEADER);
+    const newer = await encodeVault({ records: makeRecords(9) }, key, VAULT_HEADER);
     fsMock.__files.set(TMP, newer.subarray(0, newer.length - 20)); // truncated: fails the tag
 
     expect(await readVault(key)).toEqual(before);
@@ -326,7 +330,7 @@ describe('readVault / writeVault', () => {
   });
 
   it('a .tmp alone is never a vault: it is discarded and the vault reported absent', async () => {
-    const bytes = await encodeVaultFile(makeRecords(3), key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: makeRecords(3) }, key, VAULT_HEADER);
     fsMock.__files.set(TMP, bytes);
     expect(await readVault(key)).toBeNull();
     expect(fsMock.__files.size).toBe(0);
@@ -341,7 +345,7 @@ describe('readVault / writeVault', () => {
   });
 
   it('commitVaultBytes stores exactly the given bytes; removeVault deletes every copy', async () => {
-    const bytes = await encodeVaultFile(makeRecords(1), key, VAULT_HEADER);
+    const bytes = await encodeVault({ records: makeRecords(1) }, key, VAULT_HEADER);
     await commitVaultBytes(bytes);
     expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(bytes));
     fsMock.__files.set(BAK, bytes);
@@ -359,7 +363,7 @@ describe('readVault / writeVault', () => {
       salt: '00',
       wrappedKey: 'v1:00:00',
     };
-    fsMock.__files.set(VAULT, await encodeVaultFile(makeRecords(1), key, header));
+    fsMock.__files.set(VAULT, await encodeVault({ records: makeRecords(1) }, key, header));
     await expect(readVault(key)).rejects.toThrow(VaultFileFormatError);
   });
 
@@ -380,6 +384,39 @@ describe('readVault / writeVault', () => {
     expect(fsMock.__files.get(VAULT)).toBe(before);
   });
 
+  it('falls back to .bak when the primary is undecodable, repairing the primary', async () => {
+    const good = makeRecords(2);
+    await writeVault(good, key);
+    const goodBytes = fsMock.__files.get(VAULT) ?? new Uint8Array();
+
+    fsMock.__files.set(BAK, goodBytes);
+    fsMock.__files.set(VAULT, new Uint8Array(0)); // zero-length primary
+    expect(await readVault(key)).toEqual(good);
+    expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(goodBytes));
+    expect(fsMock.__files.has(BAK)).toBe(false);
+
+    fsMock.__files.set(BAK, goodBytes);
+    fsMock.__files.set(VAULT, goodBytes.subarray(0, goodBytes.length - 9)); // truncated: tag fails
+    expect(await readVault(key)).toEqual(good);
+    expect(Array.from(fsMock.__files.get(VAULT) ?? [])).toEqual(Array.from(goodBytes));
+    expect(fsMock.__files.has(BAK)).toBe(false);
+  });
+
+  it('a bad primary with no usable .bak surfaces the primary error', async () => {
+    fsMock.__files.set(VAULT, new Uint8Array(0));
+    await expect(readVault(key)).rejects.toThrow(VaultFileFormatError);
+    const bytes = await encodeVault({ records: makeRecords(1) }, key, VAULT_HEADER);
+    const flipped = new Uint8Array(bytes);
+    flipped[flipped.length - 1] = (flipped[flipped.length - 1] ?? 0) ^ 1;
+    fsMock.__files.set(VAULT, flipped);
+    await expect(readVault(key)).rejects.toThrow(VaultFileAuthError);
+    // A .bak that also fails does not mask the primary's error either.
+    fsMock.__files.set(BAK, new Uint8Array([1, 2, 3]));
+    await expect(readVault(key)).rejects.toThrow(VaultFileAuthError);
+    expect(fsMock.__files.has(VAULT)).toBe(true);
+    expect((await readVaultPayload(await generateVaultKey()).catch((e: unknown) => e)) instanceof VaultFileAuthError).toBe(true);
+  });
+
   it('uses expo-crypto for the nonce', async () => {
     const spy = jest.spyOn(Crypto, 'getRandomBytesAsync');
     await writeVault([], key);
@@ -394,11 +431,34 @@ describe('committed fixture', () => {
     expect(decoded.records).toEqual(FIXTURE_RECORDS);
   });
 
-  it('re-encoding the fixture under its fixed nonce reproduces the committed bytes exactly', async () => {
-    jest
-      .spyOn(Crypto, 'getRandomBytesAsync')
-      .mockImplementationOnce(async (n: number) => Uint8Array.from({ length: n }, (_, i) => i));
-    const bytes = await encodeVaultFile(FIXTURE_RECORDS, hexToBytes(FIXTURE_KEY_HEX), { kind: 'vault' });
+  it('re-encoding the fixture under its fixed nonce reproduces the committed bytes exactly', () => {
+    const nonce = Uint8Array.from({ length: 12 }, (_, i) => i);
+    const bytes = encodeVaultFile({ records: FIXTURE_RECORDS }, hexToBytes(FIXTURE_KEY_HEX), { kind: 'vault' }, nonce);
     expect(Array.from(bytes)).toEqual(Array.from(base64ToBytes(FIXTURE_BYTES_BASE64)));
+    // The fixture predates migratedV1Ids: an empty list is omitted, so it still matches.
+    const withEmpty = encodeVaultFile({ records: FIXTURE_RECORDS, migratedV1Ids: [] }, hexToBytes(FIXTURE_KEY_HEX), { kind: 'vault' }, nonce);
+    expect(Array.from(withEmpty)).toEqual(Array.from(bytes));
+    expect(decodeVaultFile(bytes, hexToBytes(FIXTURE_KEY_HEX)).migratedV1Ids).toEqual([]);
+  });
+
+  it('carries migratedV1Ids when present and rejects a malformed list', async () => {
+    const bytes = await encodeVault({ records: makeRecords(1), migratedV1Ids: ['c1', 'n1'] }, key, VAULT_HEADER);
+    expect(decodeVaultFile(bytes, key).migratedV1Ids).toEqual(['c1', 'n1']);
+    const headerBytes = utf8ToBytes(JSON.stringify(VAULT_HEADER));
+    const nonce = await Crypto.getRandomBytesAsync(12);
+    const aad = new Uint8Array([...utf8ToBytes('infovault-vault-file-v1'), ...headerBytes]);
+    const sealed = gcm(key, nonce, aad).encrypt(
+      utf8ToBytes(JSON.stringify({ payloadVersion: 1, records: [], migratedV1Ids: [1] }))
+    );
+    const bad = new Uint8Array([
+      ...utf8ToBytes('IVLT'),
+      1,
+      headerBytes.length >>> 8,
+      headerBytes.length & 0xff,
+      ...headerBytes,
+      ...nonce,
+      ...sealed,
+    ]);
+    expect(() => decodeVaultFile(bad, key)).toThrow(VaultFileFormatError);
   });
 });

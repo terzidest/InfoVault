@@ -5,7 +5,7 @@ import useAuthStore from '../authStore';
 import useRecordsStore, { RecordTooLargeError } from '../recordsStore';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
 import { MAX_RECORD_BYTES } from '../../utils/records';
-import { commitVaultBytes, encodeVaultFile, readVault, vaultExists, writeVault } from '../../services/vaultFile';
+import { commitVaultBytes, encodeVault, readVault, vaultExists, writeVault } from '../../services/vaultFile';
 import type { VaultRecordInput } from '../../types/models';
 
 const fsMock = FileSystem as unknown as {
@@ -46,7 +46,7 @@ beforeEach(() => {
 describe('open', () => {
   it('yields an empty set, and writes no file, when there is neither a vault nor v1 data', async () => {
     await unlockWith();
-    await useRecordsStore.getState().open();
+    expect(await useRecordsStore.getState().open()).toBe(true);
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(true);
     expect(useRecordsStore.getState().isLoading).toBe(false);
@@ -79,7 +79,7 @@ describe('open', () => {
     const key = await unlockWith();
     const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
     // Crash between moving vault.bin → .bak and .tmp → vault.bin, with a partial .tmp.
-    fsMock.__files.set(`${VAULT}.bak`, await encodeVaultFile(stored, key, { kind: 'vault' }));
+    fsMock.__files.set(`${VAULT}.bak`, await encodeVault({ records: stored }, key, { kind: 'vault' }));
     fsMock.__files.set(`${VAULT}.tmp`, new Uint8Array([0x49, 0x56]));
     await useRecordsStore.getState().open();
     expect(useRecordsStore.getState().records).toEqual(stored);
@@ -113,7 +113,7 @@ describe('open', () => {
       useAuthStore.getState().logout();
       return null;
     });
-    await useRecordsStore.getState().open();
+    expect(await useRecordsStore.getState().open()).toBe(false);
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(false);
     expect(useRecordsStore.getState().error).toBeNull();
@@ -123,7 +123,7 @@ describe('open', () => {
       useRecordsStore.getState().clear();
       return null;
     });
-    await useRecordsStore.getState().open();
+    expect(await useRecordsStore.getState().open()).toBe(false);
     expect(useRecordsStore.getState().records).toEqual([]);
     expect(useRecordsStore.getState().isOpen).toBe(false);
     expect(useRecordsStore.getState().isLoading).toBe(false);
@@ -187,7 +187,7 @@ describe('open', () => {
   });
 
   it('surfaces a wrong key as an error and rethrows', async () => {
-    await commitVaultBytes(await encodeVaultFile([], await generateVaultKey(), { kind: 'vault' }));
+    await commitVaultBytes(await encodeVault({ records: [] }, await generateVaultKey(), { kind: 'vault' }));
     await unlockWith(); // the live key is not the one the file was sealed under
     await expect(useRecordsStore.getState().open()).rejects.toThrow();
     expect(useRecordsStore.getState().error).not.toBeNull();
@@ -265,10 +265,23 @@ describe('mutations persist through the vault file', () => {
     expect((await readVault(useAuthStore.getState().encryptionKey ?? new Uint8Array()))?.[0]).toEqual(same);
   });
 
-  it('update and togglePin of a missing id throw and write nothing', async () => {
+  it('update strips id and createdAt from the patch', async () => {
+    await unlockWith();
+    await useRecordsStore.getState().open();
+    const a = await useRecordsStore.getState().add(loginInput('A'));
+    const forged = { id: 'forged', createdAt: 'x', title: 'A2' } as unknown as Partial<VaultRecordInput>;
+    const updated = await useRecordsStore.getState().update(a.id, forged);
+    expect(updated.id).toBe(a.id);
+    expect(updated.createdAt).toBe(a.createdAt);
+    expect(updated.title).toBe('A2');
+    expect(useRecordsStore.getState().records.map((r) => r.id)).toEqual([a.id]);
+  });
+
+  it('update, remove and togglePin of a missing id throw and write nothing', async () => {
     await unlockWith();
     await useRecordsStore.getState().open();
     await expect(useRecordsStore.getState().update('nope', { title: 'x' })).rejects.toThrow('Record not found');
+    await expect(useRecordsStore.getState().remove('nope')).rejects.toThrow('Record not found');
     await expect(useRecordsStore.getState().togglePin('nope')).rejects.toThrow('Record not found');
     expect(useRecordsStore.getState().error).toBe('Record not found');
     expect(vaultExists()).toBe(false);
@@ -277,7 +290,7 @@ describe('mutations persist through the vault file', () => {
   it('refuses to mutate before open() succeeded, so a stale vault is never overwritten', async () => {
     const key = await unlockWith();
     const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
-    fsMock.__files.set(`${VAULT}.bak`, await encodeVaultFile(stored, key, { kind: 'vault' }));
+    fsMock.__files.set(`${VAULT}.bak`, await encodeVault({ records: stored }, key, { kind: 'vault' }));
     await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is not open');
     await expect(useRecordsStore.getState().remove('a')).rejects.toThrow('Vault is not open');
     expect(fsMock.__files.has(VAULT)).toBe(false);
@@ -311,7 +324,7 @@ describe('mutations persist through the vault file', () => {
     const first = await useRecordsStore.getState().add(loginInput('A'));
     const bytesBefore = fsMock.__files.get(VAULT);
 
-    // The nonce draw is the await inside encodeVaultFile: lock during it.
+    // The nonce draw is the await inside encodeVault: lock during it.
     jest.spyOn(Crypto, 'getRandomBytesAsync').mockImplementationOnce(async (n: number) => {
       useAuthStore.getState().logout();
       return new Uint8Array(n);

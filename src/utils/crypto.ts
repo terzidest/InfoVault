@@ -123,7 +123,7 @@ export const unwrapVaultKey = (wrapped: string, wrappingKey: Uint8Array): Uint8A
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isPositiveInt = (value: unknown): value is number =>

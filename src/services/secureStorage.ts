@@ -2,23 +2,13 @@ import * as SecureStore from 'expo-secure-store';
 import type { StorageType } from '../types/storage';
 import { encryptRecord, decryptRecord } from '../utils/crypto';
 import useAuthStore from '../store/authStore';
+import { requireKey } from '../store/vaultKey';
 
 export const STORAGE_TYPES: readonly StorageType[] = ['credential', 'note', 'personalInfo'];
 
 // The SecureStore entry listing a type's record ids (v1 layout). The v2
 // migration reads these; nothing else should spell the name.
 export const registryKey = (type: StorageType): string => `${type}Keys`;
-
-// The in-memory key lives in authStore; read it at call-time (never at module
-// load) so the authStore <-> secureStorage import cycle stays safe.
-export const requireKey = (): Uint8Array => {
-  const key = useAuthStore.getState().encryptionKey;
-  if (!key) throw new Error('Vault is locked');
-  return key;
-};
-
-export const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 export const saveToSecureStore = async (
   key: string,

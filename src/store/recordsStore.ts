@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import useAuthStore from './authStore';
 import { createOpTracker } from './opTracker';
+import { requireKey } from './vaultKey';
 import { migrateV1 } from '../services/migrateV1';
-import { errorMessage, requireKey } from '../services/secureStorage';
-import { isVaultRecord, readVault, writeVault } from '../services/vaultFile';
+import { readVaultPayload, writeVault } from '../services/vaultFile';
 import { generateSecureId } from '../utils/crypto';
+import { errorMessage } from '../utils/errors';
 import { MAX_RECORD_BYTES, serializedSize } from '../utils/records';
+import { isVaultRecord } from '../utils/vaultFormat';
 import type { VaultRecord, VaultRecordInput } from '../types/models';
 
 // The v2 record store: every record of every template, held decrypted in
@@ -26,8 +28,10 @@ export interface RecordsState {
   error: string | null;
   // True once open() has populated `records` for the current unlock.
   isOpen: boolean;
-  // Loads the vault under the key authStore currently holds.
-  open: () => Promise<void>;
+  // Loads the vault under the key authStore currently holds. Resolves true
+  // when the records were published, false when the open was abandoned
+  // because the vault locked or was cleared meanwhile (not an error).
+  open: () => Promise<boolean>;
   add: (input: VaultRecordInput) => Promise<VaultRecord>;
   update: (id: string, patch: Partial<VaultRecordInput>) => Promise<VaultRecord>;
   remove: (id: string) => Promise<boolean>;
@@ -52,6 +56,11 @@ const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
 // must not publish afterwards, so every set() re-checks it and the key.
 let generation = 0;
 
+// v1 ids the migration has converted; carried through every write so a
+// retried migration does not resurrect a record deleted in v2. Not secret,
+// nothing renders it, so it stays out of the reactive state.
+let migratedV1Ids: string[] = [];
+
 // logout() zeroes the key bytes in place and drops the reference, so a
 // reference comparison detects a lock that happened during an await.
 const isCurrent = (key: Uint8Array, gen: number): boolean =>
@@ -62,9 +71,13 @@ const assertSize = (record: VaultRecord): void => {
   if (bytes > MAX_RECORD_BYTES) throw new RecordTooLargeError(bytes);
 };
 
-// `{ title: undefined }` must not punch a hole in the record.
-const withoutUndefined = <T extends object>(patch: T): Partial<T> =>
-  Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<T>;
+// Only the user-editable part of a record may come in through a patch:
+// `{ title: undefined }` must not punch a hole, and identity/creation fields
+// are the store's to set.
+const sanitizePatch = (patch: Partial<VaultRecordInput>): Partial<VaultRecordInput> => {
+  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = patch as Partial<VaultRecord>;
+  return Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)) as Partial<VaultRecordInput>;
+};
 
 const assertValid = (record: VaultRecord): void => {
   if (!isVaultRecord(record)) throw new Error('Record is invalid');
@@ -93,7 +106,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
         // set over the real vault.
         if (!get().isOpen) throw new Error('Vault is not open');
         const { records, result } = compute(get().records);
-        await writeVault(records, key); // lock-checked after sealing
+        await writeVault({ records, migratedV1Ids }, key); // lock-checked after sealing
         if (isCurrent(key, gen)) set({ records });
         return result;
       } catch (error) {
@@ -108,6 +121,12 @@ const useRecordsStore = create<RecordsState>((set, get) => {
       }
     });
 
+  const findOrThrow = (records: VaultRecord[], id: string): VaultRecord => {
+    const existing = records.find((r) => r.id === id);
+    if (!existing) throw new Error('Record not found');
+    return existing;
+  };
+
   return {
     records: [],
     isLoading: false,
@@ -120,6 +139,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
         // and a task from before this point must not publish into this one.
         generation += 1;
         const gen = generation;
+        migratedV1Ids = [];
         set({ records: [], isOpen: false, error: null });
         let key: Uint8Array | null = null;
         ops.begin(set);
@@ -133,16 +153,18 @@ const useRecordsStore = create<RecordsState>((set, get) => {
             console.warn('v1 migration failed; will retry on the next unlock', error instanceof Error ? error.name : '');
             return null;
           });
-          // readVault also recovers a vault whose last commit was interrupted
-          // (vault.bin missing, .bak present) — never gate on vaultExists.
-          // No file is written here when there is none: setup/unlock (cutover
-          // PR) decides that.
-          const records = migration?.hadV1 ? migration.records : ((await readVault(key)) ?? []);
-          if (isCurrent(key, gen)) set({ records, isOpen: true });
+          // readVaultPayload also recovers a vault whose last commit was
+          // interrupted — never gate on vaultExists. No file is written here
+          // when there is none: setup/unlock (cutover PR) decides that.
+          const stored = migration?.hadV1 ? migration : await readVaultPayload(key);
+          if (!isCurrent(key, gen)) return false;
+          migratedV1Ids = stored?.migratedV1Ids ?? [];
+          set({ records: stored?.records ?? [], isOpen: true });
+          return true;
         } catch (error) {
           // Locked or cleared mid-open: the lock zeroed the key, so the read
           // failing is the expected consequence, not an error to surface.
-          if (key !== null && !isCurrent(key, gen)) return;
+          if (key !== null && !isCurrent(key, gen)) return false;
           console.error('Error opening the vault:', error);
           set({ error: errorMessage(error) });
           throw error;
@@ -162,20 +184,21 @@ const useRecordsStore = create<RecordsState>((set, get) => {
 
     update: (id, patch) =>
       mutate('updating', (records) => {
-        const existing = records.find((r) => r.id === id);
-        if (!existing) throw new Error('Record not found');
-        const updated: VaultRecord = { ...existing, ...withoutUndefined(patch), id, updatedAt: nowIso() };
+        const existing = findOrThrow(records, id);
+        const updated: VaultRecord = { ...existing, ...sanitizePatch(patch), updatedAt: nowIso() };
         assertValid(updated);
         return { records: records.map((r) => (r.id === id ? updated : r)), result: updated };
       }),
 
     remove: (id) =>
-      mutate('removing', (records) => ({ records: records.filter((r) => r.id !== id), result: true })),
+      mutate('removing', (records) => {
+        findOrThrow(records, id);
+        return { records: records.filter((r) => r.id !== id), result: true };
+      }),
 
     togglePin: (id) =>
       mutate('pinning', (records) => {
-        const existing = records.find((r) => r.id === id);
-        if (!existing) throw new Error('Record not found');
+        const existing = findOrThrow(records, id);
         const updated: VaultRecord = { ...existing, pinned: !existing.pinned, updatedAt: nowIso() };
         return { records: records.map((r) => (r.id === id ? updated : r)), result: updated };
       }),
@@ -186,6 +209,7 @@ const useRecordsStore = create<RecordsState>((set, get) => {
     // Any task still in flight sees the generation change and publishes nothing.
     clear: () => {
       generation += 1;
+      migratedV1Ids = [];
       set({ records: [], isOpen: false, error: null });
     },
   };

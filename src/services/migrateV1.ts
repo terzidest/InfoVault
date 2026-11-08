@@ -1,8 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
-import { decryptRecord, generateSecureId } from '../utils/crypto';
+import { decryptRecord, generateSecureId, isRecord } from '../utils/crypto';
 import { fromV1Credential, fromV1Note, fromV1PersonalInfo, timestamp } from '../utils/records';
+import { isVaultRecord } from '../utils/vaultFormat';
 import { STORAGE_TYPES, registryKey } from './secureStorage';
-import { isVaultRecord, readVault, writeVault } from './vaultFile';
+import { readVaultPayload, writeVault } from './vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../types/models';
 import type { StorageType } from '../types/storage';
 
@@ -13,15 +14,21 @@ import type { StorageType } from '../types/storage';
 // is all this needs — but it must be the live authStore key, because the
 // write refuses a key the vault no longer holds (see vaultFile.writeVault).
 //
-// Runs on every open (one parallel probe of the three registries when there
-// is nothing left), so entries an earlier pass had to leave behind are
-// retried. Never deletes a v1 entry before vault.bin holds its replacement.
-// The boundary between "bad data" and "something broke" is structural:
-// anything thrown while decrypting, parsing, mapping or validating one entry
-// is a property of that entry and makes it a leftover (kept in place,
-// registry rewritten to list it); a failing SecureStore read or a failing
-// vault write is unexpected and aborts the whole pass before any deletion. A
-// corrupt registry is left untouched along with everything it names.
+// Runs on every open, so entries an earlier pass had to leave behind are
+// retried. There is deliberately no "migration done" marker: the probe is
+// three parallel SecureStore reads, cheaper than keeping a flag honest.
+// Never deletes a v1 entry before vault.bin holds its replacement. The
+// boundary between "bad data" and "something broke" is structural: anything
+// thrown while decrypting, parsing, mapping or validating one entry is a
+// property of that entry and makes it a leftover (kept in place, registry
+// rewritten to list it); a failing SecureStore read or a failing vault write
+// is unexpected and aborts the whole pass before any deletion. A corrupt
+// registry is left untouched along with everything it names.
+//
+// The vault payload remembers every v1 id ever converted (`migratedV1Ids`).
+// On a retry — e.g. the cleanup after a successful write was interrupted — an
+// entry whose id is remembered but no longer among the records was deleted
+// in v2 after it migrated: it is not resurrected, and its v1 copy is removed.
 
 export interface MigrationResult {
   // False when no v1 registry exists at all; `records` is then empty and the
@@ -30,6 +37,7 @@ export interface MigrationResult {
   migrated: number;
   skipped: number;
   records: VaultRecord[];
+  migratedV1Ids: string[];
 }
 
 interface Registry {
@@ -59,24 +67,55 @@ const parseRegistry = (raw: string): string[] | null => {
   }
 };
 
-const isV1Item = (value: unknown): value is { id: string; title: string } =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as { id?: unknown }).id === 'string' &&
-  typeof (value as { title?: unknown }).title === 'string';
+// ---------------------------------------------------------------------------
+// v1 shape normalization
+// ---------------------------------------------------------------------------
+
+const OPTIONAL_FIELDS: Record<StorageType, readonly string[]> = {
+  credential: ['username', 'password', 'website', 'notes'],
+  note: ['content', 'category'],
+  personalInfo: ['identifier', 'issueDate', 'expiryDate', 'issuingAuthority', 'notes'],
+};
+
+// v1 never validated what it stored. Coerce each known optional field to the
+// string the mappers expect: strings are trimmed, numbers and booleans are
+// stringified (a numeric username is still a username), anything else is
+// dropped. Required strings (id, title, timestamps) are left for the record
+// guard: a record missing them is a leftover, not a guess.
+const coerce = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return undefined;
+};
+
+const normalizeV1 = (type: StorageType, item: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = { ...item };
+  for (const field of OPTIONAL_FIELDS[type]) {
+    const value = coerce(item[field]);
+    if (value === undefined) delete out[field];
+    else out[field] = value;
+  }
+  if (type === 'personalInfo') out.type = typeof item.type === 'string' ? item.type : 'Other';
+  if (type === 'note' && out.category === undefined) out.category = '';
+  return out;
+};
+
+const isV1Item = (value: unknown): value is Record<string, unknown> & { id: string; title: string } =>
+  isRecord(value) && typeof value.id === 'string' && typeof value.title === 'string';
 
 const mapV1 = (type: StorageType, item: unknown): VaultRecord | null => {
   if (!isV1Item(item)) return null;
+  const v1 = normalizeV1(type, item);
   let record: VaultRecord;
   switch (type) {
     case 'credential':
-      record = fromV1Credential(item as Credential, generateSecureId);
+      record = fromV1Credential(v1 as unknown as Credential, generateSecureId);
       break;
     case 'note':
-      record = fromV1Note(item as Note, generateSecureId);
+      record = fromV1Note(v1 as unknown as Note, generateSecureId);
       break;
     case 'personalInfo':
-      record = fromV1PersonalInfo(item as PersonalInfo, generateSecureId);
+      record = fromV1PersonalInfo(v1 as unknown as PersonalInfo, generateSecureId);
       break;
   }
   // A v1 entry missing e.g. createdAt would produce a record that vault.bin
@@ -118,7 +157,15 @@ const merge = (existing: readonly VaultRecord[], incoming: readonly VaultRecord[
 
 export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> => {
   const registries = await readRegistries();
-  if (registries.length === 0) return { hadV1: false, migrated: 0, skipped: 0, records: [] };
+  if (registries.length === 0) {
+    return { hadV1: false, migrated: 0, skipped: 0, records: [], migratedV1Ids: [] };
+  }
+
+  // readVaultPayload (not a vaultExists gate) so a vault whose last commit was
+  // interrupted is recovered and merged with, never overwritten.
+  const existing = (await readVaultPayload(vaultKey)) ?? { records: [], migratedV1Ids: [] };
+  const presentIds = new Set(existing.records.map((r) => r.id));
+  const remembered = new Set(existing.migratedV1Ids);
 
   const incoming: VaultRecord[] = [];
   const plans: RegistryPlan[] = [];
@@ -143,6 +190,11 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
         plan.done.push(id);
         return;
       }
+      if (remembered.has(id) && !presentIds.has(id)) {
+        // Migrated earlier, then deleted in v2: do not resurrect it.
+        plan.done.push(id);
+        return;
+      }
       const record = convertV1(type, sealed, vaultKey);
       if (record) {
         incoming.push(record);
@@ -155,13 +207,11 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
     plans.push(plan);
   }
 
-  // readVault (not a vaultExists gate) so a vault whose last commit was
-  // interrupted is recovered and merged with, never overwritten.
-  const existing = (await readVault(vaultKey)) ?? [];
-  const records = incoming.length > 0 ? merge(existing, incoming) : existing;
+  const records = incoming.length > 0 ? merge(existing.records, incoming) : existing.records;
+  const migratedV1Ids = [...new Set([...existing.migratedV1Ids, ...incoming.map((r) => r.id)])];
   if (incoming.length > 0) {
     // Lock-checked: a logout during the write throws here, before any deletion.
-    await writeVault(records, vaultKey);
+    await writeVault({ records, migratedV1Ids }, vaultKey);
   }
 
   // Only now is it safe to let go of the v1 copies. Cleanup is best-effort:
@@ -188,5 +238,5 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
     console.warn(`v1 migration: ${corruptRegistries} registry(ies) unreadable and left in place`);
   }
 
-  return { hadV1: true, migrated: incoming.length, skipped, records };
+  return { hadV1: true, migrated: incoming.length, skipped, records, migratedV1Ids };
 };
