@@ -1,6 +1,4 @@
-// v2 primitives (token-driven, read the theme via useTheme). The v1
-// components in this folder (Button, Input, Card, Select, SearchBar) are
-// intentionally not exported here; they are replaced screen by screen.
+// v2 primitives (token-driven, read the theme via useTheme).
 export { default as Screen } from './Screen';
 export { Title, RecordTitle, BarTitle, RowTitle, Body, Secondary, Label, Eyebrow, Mono, Kind } from './Type';
 export type { MonoVariant } from './Type';

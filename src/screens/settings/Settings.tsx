@@ -10,7 +10,7 @@ import Constants from 'expo-constants';
 import useSettingsStore from '../../store/settingsStore';
 import useAuthStore from '../../store/authStore';
 import useAuth from '../../hooks/useAuth';
-import { checkAuthenticationTypes } from '../../services/authentication';
+import { biometricLabel, describeBiometricMethod } from '../../services/authentication';
 import { useTheme } from '../../theme/useTheme';
 import {
   Screen,
@@ -55,22 +55,22 @@ const THEME_OPTIONS: SegmentedOption<ThemeMode>[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-// Pure: subtitle + icon for the biometric row from the device capability.
+// Subtitle + icon for the biometric row from the device capability.
 const describeBiometrics = (
   auth: AuthTypes | null
 ): { subtitle: string; icon: keyof typeof Ionicons.glyphMap; available: boolean } => {
   if (!auth) return { subtitle: 'Checking this phone…', icon: 'finger-print-outline', available: false };
-  if (!auth.hasHardware || !auth.isEnrolled) {
-    return { subtitle: 'No fingerprint or face enrolled on this phone', icon: 'finger-print-outline', available: false };
+  const { method, icon } = describeBiometricMethod(auth);
+  switch (method) {
+    case 'none':
+      return { subtitle: 'No fingerprint or face enrolled on this phone', icon, available: false };
+    case 'face':
+      return { subtitle: `${biometricLabel('face')} on this phone`, icon, available: true };
+    case 'fingerprint':
+      return { subtitle: 'Fingerprint on this phone', icon, available: true };
+    case 'biometrics':
+      return { subtitle: 'Biometrics on this phone', icon, available: true };
   }
-  if (auth.hasFingerprintId && auth.hasFaceId) {
-    return { subtitle: 'Biometrics on this phone', icon: 'finger-print-outline', available: true };
-  }
-  if (auth.hasFaceId) return { subtitle: 'Face unlock on this phone', icon: 'scan-outline', available: true };
-  if (auth.hasFingerprintId) {
-    return { subtitle: 'Fingerprint on this phone', icon: 'finger-print-outline', available: true };
-  }
-  return { subtitle: 'Biometrics on this phone', icon: 'finger-print-outline', available: true };
 };
 
 interface GroupProps {
@@ -109,8 +109,9 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const enableBiometricUnlock = useAuthStore((s) => s.enableBiometricUnlock);
   const disableBiometricUnlock = useAuthStore((s) => s.disableBiometricUnlock);
+  const authTypes = useAuthStore((s) => s.authTypes);
+  const refreshAuthTypes = useAuthStore((s) => s.refreshAuthTypes);
 
-  const [authTypes, setAuthTypes] = useState<AuthTypes | null>(null);
   const [timeoutSheetOpen, setTimeoutSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -119,22 +120,14 @@ const Settings: React.FC<ScreenProps<'Settings'>> = ({ navigation }) => {
     }
   }, [isAuthenticated, initSettings]);
 
-  useEffect(() => {
-    let cancelled = false;
-    checkAuthenticationTypes().then((types) => {
-      if (!cancelled) setAuthTypes(types);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // Enrolment can change while the app is backgrounded; re-probe on focus.
   useFocusEffect(
     useCallback(() => {
       if (isAuthenticated) {
         updateLastActive();
       }
-    }, [isAuthenticated, updateLastActive])
+      refreshAuthTypes();
+    }, [isAuthenticated, updateLastActive, refreshAuthTypes])
   );
 
   const biometrics = describeBiometrics(authTypes);

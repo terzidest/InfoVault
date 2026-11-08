@@ -2,8 +2,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { TemplateId } from './models';
 
 export type RootStackParamList = {
-  SetupMasterPassword: undefined;
-  Authentication: undefined;
+  Setup: undefined;
+  Unlock: undefined;
   Home: undefined;
   Record: { id: string };
   AddEditRecord: { id?: string; template?: TemplateId } | undefined;

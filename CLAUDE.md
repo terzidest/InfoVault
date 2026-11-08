@@ -70,7 +70,7 @@ Typed stack via `RootStackParamList` in `types/navigation.ts`. Any new screen or
 - **Functional components + hooks** only. `React.FC<Props>` with an explicit `Props` interface.
 - **Styling:** `StyleSheet.create` + `useTheme()` tokens (`tokens.colors`, `spacing`, `radius`, `type`, `motion`), light and dark. No styling dependencies. Compose screens from `components/ui` (`Screen`, `TextField`, `ActionButton`, `IconButton`, `ListRow`, the `Type` primitives) rather than raw `Text`/`TextInput`.
 - **Imports:** type-only imports use `import type`. Relative paths (no path aliases configured).
-- **Colors:** no hex outside `theme/tokens.ts` (the lone exception is `theme/colors.ts`, which the not-yet-rebuilt Authentication/SetupMasterPassword screens and AutoLockGate still read; it goes with them). Every screen must look right in both schemes.
+- **Colors:** no hex outside `theme/tokens.ts`. The one exception is the vault-door artwork in `components/features/vault/VaultDoor.tsx`, whose metal/steel palette is part of the illustration, not the theme (it still reads accent/amber from tokens and picks ring colors per scheme). Every screen must look right in both schemes.
 - Error handling in stores follows a fixed pattern: `set loading → try → set result → catch → set error + rethrow`. Match it.
 
 ## Conventions & gotchas
@@ -78,7 +78,7 @@ Typed stack via `RootStackParamList` in `types/navigation.ts`. Any new screen or
 - There is one record type (`VaultRecord`: title, template, ordered kinded fields, tags, pinned). New templates need a `TEMPLATES` entry in `utils/records.ts` (label + seeded fields), an icon in `components/features/records/recordUi.ts` (`TEMPLATE_ICONS`, `TEMPLATE_ORDER`) and a tint in `theme/tokens.ts`; the `TemplateId` union in `types/models.ts` drives all three. New field kinds touch `FieldKind`, `FieldValue`, `FieldEditorRow` and `KIND_ORDER`.
 - Masking in `FieldValue` (fixed-width dots, reveal with auto-hide) is display-only — NOT a security control. Secret values are also excluded from search on purpose.
 - The v1 `Credential`/`Note`/`PersonalInfo` types stay in `types/models.ts` because the migration mappers in `utils/records.ts` read them. Don't rename or "clean up" the v1 layout names in `services/legacyVault.ts` either — they are what is on users' devices.
-- The `Input` component (still used by the v1-styled Authentication/SetupMasterPassword screens) handles `secure` (toggle visibility) and `sensitive` (badge) as separate concerns — don't conflate them.
+- Animating `react-native-svg` with Reanimated: only props the native elements understand (`opacity`, geometry like `y`/`r`/`cx`, `strokeDashoffset`) work through `animatedProps`; `rotation`/`translate`/`scale` are resolved in JS at render and do not animate. Rotate or scale an `Animated.View` around the `<Svg>` instead (see `VaultDoor.tsx`).
 - Don't leave dead "Coming Soon" alerts when wiring a real feature — replace them, and remove disabled toggles for features that aren't coming.
 - Keep the README's security claims in sync with reality. If you change what the app actually does, update `README.md` and `SECURITY.md` in the same change.
 

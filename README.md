@@ -16,7 +16,7 @@ InfoVault is a local-first, secure personal information manager built with React
 ## Features
 
 - **Master-password vault** — everything is encrypted client-side; the master password is never stored, and the encryption key exists only in memory while the vault is unlocked
-- **Biometric unlock** — optional fingerprint/face unlock, backed by a key held in the platform keystore behind the OS biometric gate
+- **Biometric unlock** — optional fingerprint/face unlock, backed by a key held in the platform keystore behind the OS biometric gate; the Unlock screen names the method the phone has and offers the master password alongside it
 - **One record type, eight templates** — Login, ID number, ID document, SIM, Card, Wi‑Fi, Note and Custom seed a record's fields; any field can be added, relabeled, reordered or re-kinded (text, secret, number, date, url, multiline)
 - **Fields rendered by kind** — secrets masked with reveal, auto-hide and timed copy; identification numbers large, monospace and grouped for reading out; dates show expiry; urls open
 - **Search-first Home** — the search box is the first thing on screen, filtering titles, labels, tags and non-secret values; pinned records sit above the list; every row has a one-tap copy
@@ -85,18 +85,19 @@ All three run in CI on every pull request, along with a bundle export.
 
 ```
 src/
-├── assets/          # Images and Lottie animations
+├── assets/          # Images
 ├── components/
 │   ├── ui/          # Token-driven primitives (Screen, TextField, ActionButton, ListRow, ...)
 │   └── features/
 │       ├── records/ # Record UI: FieldValue, RecordRow, PinnedCard, FieldEditorRow, GeneratorSheet
+│       ├── vault/   # The SVG vault door and its glow/ripple (Unlock, Setup)
 │       └── AutoLockGate.tsx
-├── screens/         # Home, RecordScreen, AddEditRecordScreen, settings/, auth/
+├── screens/         # Home, RecordScreen, AddEditRecordScreen, settings/, auth/ (Unlock, Setup)
 ├── store/           # Zustand: authStore (key, unlock), recordsStore (records), settingsStore
 ├── services/        # Side-effect boundary: vaultFile, migrateV1, legacyVault, biometrics, clipboard
 ├── navigation/      # Typed native stack (six screens)
 ├── theme/           # Design tokens (light + dark), ThemeProvider, useTheme
-├── utils/           # Pure functions: crypto, vaultFormat, records, formatters, validation, password
+├── utils/           # Pure functions: crypto, vaultFormat, records, formatters, validation, password, passwordRules
 ├── hooks/           # useAuth
 └── types/           # Shared models and navigation types
 ```
@@ -110,15 +111,13 @@ src/
 - **Expo Local Authentication** — biometric gate
 - **Zustand** — state management
 - **React Navigation** (native stack)
-- **Reanimated** — list entrance motion
-- **Lottie** — unlock animation
+- **Reanimated + react-native-svg** — list entrance motion and the vault-door unlock sequence
 
 ## Roadmap
 
 - Encrypted export / import — the vault file format already is the backup format; the share-sheet flow and the password re-prompt are what remain
 - Change-master-password flow (re-wraps the vault key; records are untouched)
 - Argon2id as the default KDF — supported by the vault format, pending a native implementation and on-device latency measurement (see [SECURITY.md](SECURITY.md))
-- Unlock and Setup screens on the v2 theme
 
 ## Acknowledgments
 

@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/ciphers/utils.js';
 import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import * as LocalAuthentication from 'expo-local-authentication';
 import useAuthStore from '../authStore';
 import useRecordsStore from '../recordsStore';
 import * as crypto from '../../utils/crypto';
@@ -21,6 +22,10 @@ const secureStoreMock = SecureStore as unknown as {
   __authGatedWrites: () => number;
 };
 const fsMock = FileSystem as unknown as { __files: Map<string, Uint8Array>; __reset: () => void };
+const localAuthMock = LocalAuthentication as unknown as {
+  __setDevice: (next: { hasHardware?: boolean; isEnrolled?: boolean; types?: number[] }) => void;
+  __reset: () => void;
+};
 
 const VAULT = 'file:///mock/documents/vault.bin';
 
@@ -69,6 +74,7 @@ const seedLegacyVault = async (password: string) => {
 beforeEach(() => {
   secureStoreMock.__reset();
   fsMock.__reset();
+  localAuthMock.__reset();
   jest.replaceProperty(crypto, 'CURRENT_KDF', FAST_PBKDF2);
   useAuthStore.setState({
     isAuthenticated: false,
@@ -79,6 +85,7 @@ beforeEach(() => {
     encryptionKey: null,
     biometricAvailable: false,
     biometricEnabled: false,
+    authTypes: null,
     biometricRepairNeeded: false,
     hasLegacyData: false,
     isMigrating: false,
@@ -334,6 +341,36 @@ describe('init', () => {
     await useAuthStore.getState().init();
     expect(useAuthStore.getState().needsSetup).toBe(false);
     expect(useAuthStore.getState().biometricEnabled).toBe(true);
+  });
+
+  it('caches the device capability for the screens', async () => {
+    await useAuthStore.getState().init();
+    const { authTypes, biometricAvailable } = useAuthStore.getState();
+    expect(authTypes).toMatchObject({ hasHardware: true, isEnrolled: true, hasFingerprintId: true, hasFaceId: false });
+    expect(biometricAvailable).toBe(true);
+  });
+
+  it('refreshAuthTypes re-probes and only narrows biometricEnabled', async () => {
+    secureStoreMock.__store.set(SETUP_KEY, 'true');
+    secureStoreMock.__store.set(BIOMETRIC_ENABLED_KEY, 'true');
+    secureStoreMock.__store.set(HEADER_KEY, '{"version":2}');
+    fsMock.__files.set(VAULT, new Uint8Array([1]));
+    await useAuthStore.getState().init();
+    expect(useAuthStore.getState().biometricEnabled).toBe(true);
+
+    // Enrolment removed while backgrounded.
+    localAuthMock.__setDevice({ isEnrolled: false });
+    await useAuthStore.getState().refreshAuthTypes();
+    expect(useAuthStore.getState().authTypes?.isEnrolled).toBe(false);
+    expect(useAuthStore.getState().biometricAvailable).toBe(false);
+    expect(useAuthStore.getState().biometricEnabled).toBe(false);
+
+    // Enrolled again: availability returns, but the opt-in is not re-asserted here.
+    localAuthMock.__setDevice({ isEnrolled: true, types: [2] });
+    await useAuthStore.getState().refreshAuthTypes();
+    expect(useAuthStore.getState().authTypes).toMatchObject({ isEnrolled: true, hasFaceId: true });
+    expect(useAuthStore.getState().biometricAvailable).toBe(true);
+    expect(useAuthStore.getState().biometricEnabled).toBe(false);
   });
 
   it('a read error never routes to setup (which would wipe records)', async () => {

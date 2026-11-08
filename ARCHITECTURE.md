@@ -212,4 +212,4 @@ Ten choices with the alternative each one beat. The first four change what v1 di
 
 ---
 
-*Describes `main`; sections marked planned (Argon2id, export/import, change password, the Unlock/Setup redesign) are not shipped yet. Update it in the same change as any decision it records.*
+*Describes `main`; sections marked planned (Argon2id, export/import, change password) are not shipped yet. Update it in the same change as any decision it records.*
