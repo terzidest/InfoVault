@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import * as crypto from '../../utils/crypto';
 import { encryptRecord, generateVaultKey } from '../../utils/crypto';
-import { hasV1Data, migrateV1 } from '../migrateV1';
+import { MIGRATION_DONE_KEY, hasV1Data, migrateV1 } from '../migrateV1';
 import { encodeVaultFile, readVault, vaultExists, writeVault } from '../vaultFile';
 import type { Credential, Note, PersonalInfo, VaultRecord } from '../../types/models';
 
@@ -162,6 +162,7 @@ describe('migrateV1', () => {
     await writeVault([{ ...CREDS[0]!, template: 'login', fields: [], pinned: false, tags: [] } as VaultRecord], key);
     const result = await migrateV1(key);
     expect(result).toEqual({ hadV1: false, migrated: 0, skipped: 0, records: [] });
+    expect(secureStoreMock.__store.get(MIGRATION_DONE_KEY)).toBe('true');
   });
 
   it('drops dangling registry ids without writing a vault', async () => {
@@ -199,29 +200,72 @@ describe('migrateV1', () => {
     await expect(readVault(key)).resolves.toHaveLength(3);
   });
 
-  it('aborts on an unexpected error before any deletion, so the next pass retries', async () => {
+  it('anything thrown while converting an entry makes it a leftover, not an abort', async () => {
+    await seedV1(key);
+    // A mapper tripping over a malformed v1 field (category must be a string).
+    secureStoreMock.__store.set('n1', await encryptRecord({ ...NOTE, category: 5 }, key));
+    jest.spyOn(crypto, 'decryptRecord').mockImplementationOnce(() => {
+      throw new TypeError('unexpected shape');
+    });
+    const result = await migrateV1(key);
+    expect(result.migrated).toBe(2);
+    expect(result.skipped).toBe(2);
+    expect(secureStoreMock.__store.has('c1')).toBe(true); // the TypeError'd one (first read)
+    expect(secureStoreMock.__store.has('n1')).toBe(true);
+    expect(JSON.parse(secureStoreMock.__store.get('noteKeys') ?? '')).toEqual(['n1']);
+    expect((await readVault(key))?.map((r) => r.id).sort()).toEqual(['c2', 'p1']);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('2 record(s)'));
+  });
+
+  it('a failing SecureStore read aborts before any deletion, so the next pass retries', async () => {
     await seedV1(key);
     const before = new Map(secureStoreMock.__store);
-    jest.spyOn(crypto, 'decryptRecord').mockImplementationOnce(() => {
-      throw new TypeError('native bridge exploded');
-    });
-    await expect(migrateV1(key)).rejects.toThrow('native bridge exploded');
-    expect(secureStoreMock.__store).toEqual(before);
-    expect(vaultExists()).toBe(false);
-
-    // Fourth read = the first entry (after the three registry probes).
     const realGet = SecureStore.getItemAsync;
-    let reads = 0;
     const getSpy = jest.spyOn(SecureStore, 'getItemAsync').mockImplementation(async (k, o) => {
-      reads += 1;
-      if (reads === 4) throw new Error('keystore unavailable');
+      if (k === 'c2') throw new Error('keystore unavailable');
       return realGet(k, o);
     });
     await expect(migrateV1(key)).rejects.toThrow('keystore unavailable');
     expect(secureStoreMock.__store).toEqual(before);
+    expect(vaultExists()).toBe(false);
     getSpy.mockRestore();
-
     expect((await migrateV1(key)).migrated).toBe(4);
+  });
+
+  it('on an updatedAt tie the existing vault record wins', async () => {
+    await seedV1(key);
+    const tie: VaultRecord = {
+      id: 'c1',
+      title: 'Already in v2',
+      template: 'login',
+      fields: [],
+      pinned: false,
+      tags: [],
+      createdAt: T1,
+      updatedAt: T1, // same as the v1 copy
+    };
+    await writeVault([tie], key);
+    await migrateV1(key);
+    expect(byId((await readVault(key)) ?? []).get('c1')?.title).toBe('Already in v2');
+  });
+
+  it('skips the registry probe once a pass found nothing, and clears the flag if a registry turns up', async () => {
+    expect(await migrateV1(key)).toEqual({ hadV1: false, migrated: 0, skipped: 0, records: [] });
+    expect(secureStoreMock.__store.get(MIGRATION_DONE_KEY)).toBe('true');
+
+    const getSpy = jest.spyOn(SecureStore, 'getItemAsync');
+    await migrateV1(key);
+    expect(getSpy).toHaveBeenCalledTimes(1); // the flag only
+    expect(getSpy).toHaveBeenCalledWith(MIGRATION_DONE_KEY);
+
+    // A registry appearing behind the flag (e.g. a restored keychain): the
+    // flagged pass skips it, but any probe that sees it drops the flag.
+    await seedV1(key);
+    expect((await migrateV1(key)).hadV1).toBe(false);
+    expect(await hasV1Data()).toBe(true);
+    expect(secureStoreMock.__store.has(MIGRATION_DONE_KEY)).toBe(false);
+    expect((await migrateV1(key)).migrated).toBe(4);
+    expect(secureStoreMock.__store.has(MIGRATION_DONE_KEY)).toBe(false); // only set by an empty probe
   });
 
   it('merges with a vault whose last commit was interrupted (vault.bin missing, .bak present)', async () => {

@@ -129,6 +129,25 @@ describe('open', () => {
     expect(useRecordsStore.getState().isLoading).toBe(false);
   });
 
+  it('a migration failure is not fatal: the existing vault loads, v1 stays for the next unlock', async () => {
+    const key = await unlockWith();
+    const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
+    await writeVault(stored, key);
+    secureStoreMock.__store.set('c1', await encryptRecord({ id: 'c1', title: 'Bank', createdAt: 't', updatedAt: 't' }, key));
+    secureStoreMock.__store.set('credentialKeys', JSON.stringify(['c1']));
+    const realGet = SecureStore.getItemAsync;
+    jest.spyOn(SecureStore, 'getItemAsync').mockImplementation(async (k, o) => {
+      if (k === 'c1') throw new Error('keystore unavailable');
+      return realGet(k, o);
+    });
+    await useRecordsStore.getState().open(key);
+    expect(useRecordsStore.getState().records).toEqual(stored);
+    expect(useRecordsStore.getState().isOpen).toBe(true);
+    expect(useRecordsStore.getState().error).toBeNull();
+    expect(secureStoreMock.__store.has('c1')).toBe(true);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('migration failed'), 'Error');
+  });
+
   it('surfaces a wrong key as an error and rethrows', async () => {
     await writeVault([], await generateVaultKey());
     const other = await unlockWith(); // the live key is not the one the file was sealed under
@@ -202,6 +221,28 @@ describe('mutations persist through the vault file', () => {
     expect(vaultExists()).toBe(false);
   });
 
+  it('refuses to mutate before open() succeeded, so a stale vault is never overwritten', async () => {
+    const key = await unlockWith();
+    const stored = [{ ...loginInput('A'), id: 'a', createdAt: 't', updatedAt: 't' }];
+    fsMock.__files.set(`${VAULT}.bak`, await encodeVaultFile(stored, key, { kind: 'vault' }));
+    await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is not open');
+    await expect(useRecordsStore.getState().remove('a')).rejects.toThrow('Vault is not open');
+    expect(fsMock.__files.has(VAULT)).toBe(false);
+    expect(await readVault(key)).toEqual(stored);
+    useRecordsStore.getState().clear();
+    await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is not open');
+  });
+
+  it('ignores a stray id or timestamps on the add() input', async () => {
+    const key = await unlockWith();
+    await useRecordsStore.getState().open(key);
+    const stray = { ...loginInput('A'), id: 'forged', createdAt: 'x', updatedAt: 'y' } as VaultRecordInput;
+    const a = await useRecordsStore.getState().add(stray);
+    expect(a.id).not.toBe('forged');
+    expect(a.createdAt).not.toBe('x');
+    expect((await readVault(key))?.[0]?.id).toBe(a.id);
+  });
+
   it('refuses to mutate while locked and writes nothing', async () => {
     useRecordsStore.setState({ records: [], isOpen: true });
     await expect(useRecordsStore.getState().add(loginInput('A'))).rejects.toThrow('Vault is locked');
@@ -224,6 +265,7 @@ describe('mutations persist through the vault file', () => {
     await expect(useRecordsStore.getState().add(loginInput('B'))).rejects.toThrow('Vault is locked');
     expect(fsMock.__files.get(VAULT)).toBe(bytesBefore);
     expect(useRecordsStore.getState().records).toEqual([first]); // memory matches disk
+    expect(useRecordsStore.getState().error).toBeNull(); // the lock is not an error state
   });
 
   it('a failed file write leaves memory and disk consistent and sets error', async () => {

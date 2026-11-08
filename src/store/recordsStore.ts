@@ -92,15 +92,22 @@ const useRecordsStore = create<RecordsState>((set, get) => {
   // unless the vault was locked or cleared in the meantime.
   const mutate = <T>(label: string, compute: (records: VaultRecord[]) => Mutation<T>): Promise<T> =>
     enqueue(async () => {
+      const gen = generation;
+      let key: Uint8Array | null = null;
       ops.begin(set);
       try {
-        const key = requireKey();
-        const gen = generation;
+        key = requireKey();
+        // Without open()'s records in memory a write would seal a near-empty
+        // set over the real vault.
+        if (!get().isOpen) throw new Error('Vault is not open');
         const { records, result } = compute(get().records);
         await persist(records, key);
         if (isCurrent(key, gen)) set({ records });
         return result;
       } catch (error) {
+        // A lock or clear() during the write is why it failed; the caller
+        // still learns the write did not happen, but it is not an error state.
+        if (key !== null && !isCurrent(key, gen)) throw error;
         console.error(`Error ${label} record:`, error);
         set({ error: errorMessage(error) });
         throw error;
@@ -123,12 +130,16 @@ const useRecordsStore = create<RecordsState>((set, get) => {
           // Always runs: it is a single registry probe when there is nothing
           // to migrate, and it retries entries an earlier pass had to leave
           // behind. It writes vault.bin itself when it migrates anything.
-          const migration = await migrateV1(vaultKey);
+          const migration = await migrateV1(vaultKey).catch((error: unknown) => {
+            // v1 stays put for the next unlock; the existing vault still loads.
+            console.warn('v1 migration failed; will retry on the next unlock', error instanceof Error ? error.name : '');
+            return null;
+          });
           // readVault also recovers a vault whose last commit was interrupted
           // (vault.bin missing, .tmp/.bak present) — never gate on vaultExists.
           // No file is written here when there is none: setup/unlock (cutover
           // PR) decides that.
-          const records = migration.hadV1 ? migration.records : ((await readVault(vaultKey)) ?? []);
+          const records = migration?.hadV1 ? migration.records : ((await readVault(vaultKey)) ?? []);
           if (isCurrent(vaultKey, gen)) set({ records, isOpen: true });
         } catch (error) {
           // Locked or cleared mid-open: the lock zeroed the key, so the read
@@ -145,7 +156,8 @@ const useRecordsStore = create<RecordsState>((set, get) => {
     add: (input) =>
       mutate('adding', (records) => {
         const now = new Date().toISOString();
-        const record: VaultRecord = { id: generateSecureId(), ...input, createdAt: now, updatedAt: now };
+        // Spread first so a stray id/timestamp on the input can never win.
+        const record: VaultRecord = { ...input, id: generateSecureId(), createdAt: now, updatedAt: now };
         assertSize(record);
         return { records: [...records, record], result: record };
       }),

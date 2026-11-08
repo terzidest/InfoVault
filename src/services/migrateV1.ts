@@ -11,13 +11,16 @@ import type { StorageType } from '../types/storage';
 // update a biometric-first unlock has the key but no header yet, and the key
 // is all this needs.
 //
-// Runs on every open (a single registry probe when there is nothing left) so
-// that entries an earlier pass had to leave behind are retried. Never deletes
-// a v1 entry before vault.bin holds its replacement. An entry that cannot be
-// decrypted or does not map to a valid record is left in place, with its
-// registry rewritten to list only the leftovers; a corrupt registry is left
-// untouched along with every entry it names. Anything unexpected (a storage
-// read failing, a write failing) aborts the whole pass before any deletion.
+// Runs on every open until a pass finds no registries left (then a flag
+// short-circuits the probe), so entries an earlier pass had to leave behind
+// are retried. Never deletes a v1 entry before vault.bin holds its
+// replacement. The boundary between "bad data" and "something broke" is
+// structural: anything thrown while decrypting, parsing, mapping or validating
+// one entry is a property of that entry and makes it a leftover (kept in
+// place, registry rewritten to list it); a failing SecureStore read or a
+// failing vault write is unexpected and aborts the whole pass before any
+// deletion. A corrupt registry is left untouched along with everything it
+// names.
 
 const REGISTRY_KEY: Record<StorageType, string> = {
   credential: 'credentialKeys',
@@ -26,6 +29,9 @@ const REGISTRY_KEY: Record<StorageType, string> = {
 };
 
 const TYPES: readonly StorageType[] = ['credential', 'note', 'personalInfo'];
+
+// Set once a pass finds no registry at all; lets later opens skip the probe.
+export const MIGRATION_DONE_KEY = 'v1MigrationDone';
 
 export interface MigrationResult {
   // False when no v1 registry exists at all; `records` is then empty and the
@@ -36,12 +42,26 @@ export interface MigrationResult {
   records: VaultRecord[];
 }
 
-export const hasV1Data = async (): Promise<boolean> => {
-  for (const type of TYPES) {
-    if ((await SecureStore.getItemAsync(REGISTRY_KEY[type])) !== null) return true;
-  }
-  return false;
+interface Registry {
+  type: StorageType;
+  raw: string;
+}
+
+// One parallel read of the three registries; the only probe there is.
+const readRegistries = async (): Promise<Registry[]> => {
+  const raws = await Promise.all(TYPES.map((type) => SecureStore.getItemAsync(REGISTRY_KEY[type])));
+  const found: Registry[] = [];
+  TYPES.forEach((type, i) => {
+    const raw = raws[i];
+    if (raw !== null && raw !== undefined) found.push({ type, raw });
+  });
+  // A registry behind a "done" flag (restored keychain, interrupted cleanup):
+  // the flag is stale, drop it so the next pass picks the registry up.
+  if (found.length > 0) await SecureStore.deleteItemAsync(MIGRATION_DONE_KEY).catch(() => {});
+  return found;
 };
+
+export const hasV1Data = async (): Promise<boolean> => (await readRegistries()).length > 0;
 
 const parseRegistry = (raw: string): string[] | null => {
   try {
@@ -77,20 +97,14 @@ const mapV1 = (type: StorageType, item: unknown): VaultRecord | null => {
   return isVaultRecord(record) ? record : null;
 };
 
-// What a bad sealed value throws: our own format check, @noble's GCM tag /
-// length checks, hex decoding, and JSON parsing of the plaintext. Anything
-// else (a failing native read, a programming error) is not a property of the
-// data and must abort the pass rather than strand the entry.
-const DATA_ERROR = /Unrecognized sealed-data format|invalid tag|expected length|hex|padding/i;
-const isDataError = (error: unknown): boolean =>
-  error instanceof SyntaxError || (error instanceof Error && DATA_ERROR.test(error.message));
-
-const decryptV1 = (type: StorageType, sealed: string, key: Uint8Array): VaultRecord | null => {
+// Everything that depends only on the entry's bytes. Any throw here (a GCM
+// tag failure, bad hex, bad JSON, a mapper tripping over a malformed field) is
+// the entry's problem, never the pass's.
+const convertV1 = (type: StorageType, sealed: string, key: Uint8Array): VaultRecord | null => {
   try {
     return mapV1(type, decryptRecord<unknown>(sealed, key));
-  } catch (error) {
-    if (isDataError(error)) return null;
-    throw error;
+  } catch {
+    return null;
   }
 };
 
@@ -102,26 +116,31 @@ interface RegistryPlan {
   leftover: string[];
 }
 
-// Existing wins only when strictly newer; otherwise the v1 copy wins. Running
-// twice is therefore harmless: the second pass sees equal timestamps.
+// Existing wins on a tie or when newer; the v1 copy wins only when strictly
+// newer. Running twice is therefore harmless.
 const merge = (existing: readonly VaultRecord[], incoming: readonly VaultRecord[]): VaultRecord[] => {
   const byId = new Map(existing.map((r) => [r.id, r]));
   for (const record of incoming) {
     const current = byId.get(record.id);
-    if (!current || timestamp(current.updatedAt) <= timestamp(record.updatedAt)) {
+    if (!current || timestamp(current.updatedAt) < timestamp(record.updatedAt)) {
       byId.set(record.id, record);
     }
   }
   return [...byId.values()];
 };
 
+const NOTHING: MigrationResult = { hadV1: false, migrated: 0, skipped: 0, records: [] };
+
 export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> => {
-  const registries: { type: StorageType; raw: string }[] = [];
-  for (const type of TYPES) {
-    const raw = await SecureStore.getItemAsync(REGISTRY_KEY[type]);
-    if (raw !== null) registries.push({ type, raw });
+  if ((await SecureStore.getItemAsync(MIGRATION_DONE_KEY)) === 'true') {
+    return NOTHING;
   }
-  if (registries.length === 0) return { hadV1: false, migrated: 0, skipped: 0, records: [] };
+  const registries = await readRegistries();
+  if (registries.length === 0) {
+    // Best-effort; without the flag the next open just probes again.
+    await SecureStore.setItemAsync(MIGRATION_DONE_KEY, 'true').catch(() => {});
+    return NOTHING;
+  }
 
   const incoming: VaultRecord[] = [];
   const plans: RegistryPlan[] = [];
@@ -137,13 +156,14 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
     }
     const plan: RegistryPlan = { type, done: [], leftover: [] };
     for (const id of ids) {
+      // Outside convertV1's try on purpose: a failing read is not a bad entry.
       const sealed = await SecureStore.getItemAsync(id);
       if (sealed === null) {
         // Dangling registry id: nothing to carry over, nothing to keep.
         plan.done.push(id);
         continue;
       }
-      const record = decryptV1(type, sealed, vaultKey);
+      const record = convertV1(type, sealed, vaultKey);
       if (record) {
         incoming.push(record);
         plan.done.push(id);
@@ -163,9 +183,8 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
     await writeVault(records, vaultKey);
   }
 
-  // Only now is it safe to let go of the v1 copies. Deletion failures are
-  // tolerated: a leftover entry is simply migrated again (idempotently) next
-  // time.
+  // Only now is it safe to let go of the v1 copies. Cleanup is best-effort:
+  // a leftover entry is simply migrated again (idempotently) next time.
   for (const plan of plans) {
     try {
       for (const id of plan.done) {
@@ -182,7 +201,7 @@ export const migrateV1 = async (vaultKey: Uint8Array): Promise<MigrationResult> 
   }
 
   if (skipped > 0) {
-    console.warn(`v1 migration: ${skipped} record(s) could not be read and were left in place`);
+    console.warn(`v1 migration: ${skipped} record(s) could not be converted and were left in place`);
   }
   if (corruptRegistries > 0) {
     console.warn(`v1 migration: ${corruptRegistries} registry(ies) unreadable and left in place`);

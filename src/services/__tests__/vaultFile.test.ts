@@ -255,8 +255,9 @@ describe('readVault / writeVault', () => {
     expect(await readVault(key)).toEqual(before);
   });
 
-  it('a failed move of .tmp into place: the complete .tmp (newest) is recovered over .bak', async () => {
-    await writeVault(makeRecords(2), key);
+  it('a failed move of .tmp into place: .bak (last acknowledged) is restored and the .tmp discarded', async () => {
+    const before = makeRecords(2);
+    await writeVault(before, key);
 
     fsMock.__failNextMove('vault.bin.tmp');
     await expect(writeVault(makeRecords(9), key)).rejects.toThrow('simulated move failure');
@@ -264,11 +265,35 @@ describe('readVault / writeVault', () => {
     expect(fsMock.__files.has(BAK)).toBe(true);
     expect(fsMock.__files.has(TMP)).toBe(true);
 
-    // .tmp decoded, so it is the newest complete file: restore it, drop .bak.
-    expect(await readVault(key)).toEqual(makeRecords(9));
+    // The caller saw that write fail, so memory == disk means `before`.
+    expect(await readVault(key)).toEqual(before);
     expect(fsMock.__files.has(VAULT)).toBe(true);
     expect(fsMock.__files.has(BAK)).toBe(false);
     expect(fsMock.__files.has(TMP)).toBe(false);
+  });
+
+  it('a later write on an interrupted-commit state builds on the last acknowledged file', async () => {
+    const before = makeRecords(2);
+    await writeVault(before, key);
+    fsMock.__failNextMove('vault.bin.tmp');
+    await expect(writeVault(makeRecords(9), key)).rejects.toThrow();
+    expect(fsMock.__files.has(VAULT)).toBe(false);
+
+    // A tmp write failing in that state still leaves the previous file readable.
+    fsMock.__failNextWrite('vault.bin.tmp');
+    await expect(writeVault(makeRecords(5), key)).rejects.toThrow('simulated write failure');
+    expect(fsMock.__files.has(VAULT)).toBe(true);
+    expect(fsMock.__files.has(BAK)).toBe(false);
+    expect(fsMock.__files.has(TMP)).toBe(false);
+    expect(await readVault(key)).toEqual(before);
+
+    // And a successful one replaces it cleanly.
+    fsMock.__files.delete(VAULT);
+    fsMock.__files.set(BAK, await encodeVaultFile(before, key, VAULT_HEADER));
+    fsMock.__files.set(TMP, new Uint8Array([1, 2, 3]));
+    await writeVault(makeRecords(5), key);
+    expect([...fsMock.__files.keys()]).toEqual([VAULT]);
+    expect(await readVault(key)).toEqual(makeRecords(5));
   });
 
   it('a partial .tmp next to a .bak: .bak is restored and the partial .tmp dropped', async () => {
@@ -286,23 +311,11 @@ describe('readVault / writeVault', () => {
     expect(fsMock.__files.has(TMP)).toBe(false);
   });
 
-  it('a .tmp that fails the tag with nothing behind it fails closed rather than reporting "no vault"', async () => {
-    const bytes = await encodeVaultFile(makeRecords(1), key, VAULT_HEADER);
+  it('a .tmp alone is never a vault: it is discarded and the vault reported absent', async () => {
+    const bytes = await encodeVaultFile(makeRecords(3), key, VAULT_HEADER);
     fsMock.__files.set(TMP, bytes);
-    await expect(readVault(await generateVaultKey())).rejects.toThrow(VaultFileAuthError);
-  });
-
-  it('recovers a fully written .tmp when nothing else exists, and ignores a partial one', async () => {
-    const records = makeRecords(3);
-    const bytes = await encodeVaultFile(records, key, VAULT_HEADER);
-    fsMock.__files.set(TMP, bytes);
-    expect(await readVault(key)).toEqual(records);
-    expect(fsMock.__files.has(VAULT)).toBe(true);
-    expect(fsMock.__files.has(TMP)).toBe(false);
-
-    fsMock.__reset();
-    fsMock.__files.set(TMP, bytes.subarray(0, 5)); // partial write: not a vault
     expect(await readVault(key)).toBeNull();
+    expect(fsMock.__files.size).toBe(0);
   });
 
   it('cleans up stale .bak/.tmp leftovers once the primary reads fine', async () => {

@@ -219,22 +219,26 @@ export const vaultExists = (): boolean => vaultFile().exists;
  * lose the vault. So instead: write `.tmp` → move the current file to `.bak`
  * → move `.tmp` into place (destination now absent, no overwrite needed) →
  * delete `.bak`. At every step either `vault.bin` or `vault.bin.bak` holds
- * the previous complete file, and readVault recovers from `.bak` (or a fully
- * written `.tmp`) when `vault.bin` is missing.
+ * the last acknowledged file. `.tmp` is never authoritative: a previous
+ * commit that failed before its final move belongs to a mutation the caller
+ * saw fail, so a stray `.tmp` is discarded and a stranded `.bak` is put back
+ * first, and the new write builds on that.
  */
 export const commitVaultBytes = async (bytes: Uint8Array): Promise<void> => {
-  const tmp = tmpFile();
-  const vault = vaultFile();
-  const bak = bakFile();
+  deleteIfExists(tmpFile());
+  if (!vaultFile().exists && bakFile().exists) {
+    await bakFile().move(vaultFile());
+  }
 
-  deleteIfExists(tmp);
+  const tmp = tmpFile();
   await tmp.write(bytes);
 
+  const vault = vaultFile();
   if (vault.exists) {
     // `.bak` is disposable, so overwriting a stale one is fine. Note that
     // move() repoints the moved instance at its new location, so every
     // destination below is a fresh reference.
-    await vault.move(bak, { overwrite: true });
+    await vault.move(bakFile(), { overwrite: true });
   }
   await tmp.move(vaultFile());
   deleteIfExists(bakFile());
@@ -257,46 +261,29 @@ const readAndDecode = async (file: File, key: Uint8Array): Promise<VaultRecord[]
 /**
  * Returns the records, or null when there is no vault on disk at all.
  *
- * Recovery (see commitVaultBytes) when `vault.bin` is missing: a `.tmp` that
- * decodes is the newest complete file (its move never happened; a partial
- * write cannot pass the tag check), so it is restored first. Otherwise `.bak`
- * is the previous complete file and is restored. A `.tmp` that does not decode
- * with no `.bak` behind it is either a partial first-ever write or the wrong
- * key: a format failure means partial (→ null), a tag failure is rethrown
- * rather than guessed at.
+ * Recovery (see commitVaultBytes) when `vault.bin` is missing: `.bak` is the
+ * last acknowledged file and is restored. `.tmp` is never authoritative — it
+ * is the unfinished write of a mutation whose caller saw it fail — and is
+ * deleted whenever it is seen.
  */
 export const readVault = async (key: Uint8Array): Promise<VaultRecord[] | null> => {
+  deleteIfExists(tmpFile());
+
   const vault = vaultFile();
   if (vault.exists) {
     const records = await readAndDecode(vault, key);
-    // Leftovers from an interrupted commit; the primary is intact.
+    // Leftover from an interrupted commit; the primary is intact.
     deleteIfExists(bakFile());
-    deleteIfExists(tmpFile());
     return records;
   }
 
-  const tmp = tmpFile();
   const bak = bakFile();
-  let tmpError: unknown = null;
-  if (tmp.exists) {
-    try {
-      const records = await readAndDecode(tmp, key);
-      await tmp.move(vaultFile());
-      deleteIfExists(bakFile());
-      return records;
-    } catch (error) {
-      tmpError = error;
-    }
-  }
-
   if (bak.exists) {
     const records = await readAndDecode(bak, key);
     await bak.move(vaultFile());
-    deleteIfExists(tmpFile());
     return records;
   }
 
-  if (tmpError instanceof VaultFileAuthError) throw tmpError;
   return null;
 };
 
